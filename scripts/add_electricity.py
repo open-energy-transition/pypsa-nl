@@ -450,7 +450,8 @@ def attach_load(
 
     # apply clustering busmap
     busmap = pd.read_csv(busmap_fn, dtype=str)
-    index_col = "name" if PYPSA_V1 else "Bus"
+    index_names = ["Bus", "Index", "name"]
+    index_col = next((col for col in index_names if col in busmap.columns), None)
     busmap = busmap.set_index(index_col).squeeze()
     load = load.groupby(busmap).sum().T
 
