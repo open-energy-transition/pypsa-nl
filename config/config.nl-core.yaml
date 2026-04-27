@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=../schema.default.json
+# SPDX-FileCopyrightText: Contributors to Open-TYNDP <https://github.com/open-energy-transition/open-tyndp>
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+#
+# SPDX-License-Identifier: CC0-1.0
+
+# snakemake resources/nl-core/networks/base_s_21_elec.nc --configfile config/config.nl-core.yaml -call
+
+run:
+  name: "nl-core"
+
+scenario:
+  clusters:
+  - 19
+  planning_horizons:
+  - 2040
+  - 2050
+
+countries: ['BE', 'DE', 'DK', 'GB', 'NL']
+
+clustering:
+  mode: custom_busshapes
+
+electricity:
+  base_network: osm
+
+# * Move custom busmaps to
+#   ``data/busmaps/elec_s{simpl}_{clusters}_{base_network}.csv``. This allows for
+#   different busmaps depending on the base network.
+#   (https://github.com/PyPSA/pypsa-eur/pull/1231)

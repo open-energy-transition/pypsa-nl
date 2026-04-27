@@ -135,6 +135,13 @@ rule add_brownfield:
 ruleorder: add_existing_baseyear > add_brownfield
 
 
+myopic_network = branch(
+    config_provider("final_adjustment"),
+    "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_brownfield_adjusted.nc",
+    "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_brownfield.nc",
+)
+
+
 rule solve_sector_network_myopic:
     message:
         "Solving sector-coupled network with myopic foresight for {wildcards.clusters} clusters, {wildcards.planning_horizons} planning horizons, {wildcards.opts} electric options and {wildcards.sector_opts} sector options"
@@ -150,9 +157,7 @@ rule solve_sector_network_myopic:
             "electricity", "tyndp_renewable_carriers"
         ),
     input:
-        network=resources(
-            "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_brownfield.nc"
-        ),
+        network=resources(myopic_network)
         offshore_zone_trajectories=branch(
             config_provider("sector", "offshore_hubs_tyndp", "enable"),
             resources("offshore_zone_trajectories.csv"),

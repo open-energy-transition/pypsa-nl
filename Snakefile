@@ -91,6 +91,7 @@ include: "rules/solve_electricity.smk"
 include: "rules/postprocess.smk"
 include: "rules/development.smk"
 include: "rules/report.smk"
+include: "rules/pypsa_nl.smk"
 
 
 if config["tyndp_scenario"]:
