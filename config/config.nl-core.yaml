@@ -9,20 +9,136 @@
 run:
   name: "nl-core"
 
+foresight: myopic
+
 scenario:
   clusters:
-  - 19
+  - 20
   planning_horizons:
-  - 2040
   - 2050
 
-countries: ['BE', 'DE', 'DK', 'GB', 'NL']
+countries: ['BE', 'DE', 'DK', 'GB', 'NL', 'NO']
 
-clustering:
-  mode: custom_busshapes
+co2_budget:
 
 electricity:
   base_network: osm
+  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, offwind-float] # solar-hsat, hydro (very small)
+
+sector:
+  transport: true
+  heating: false
+  biomass: true
+  industry: false
+  shipping: true
+  aviation: true
+  agriculture: false
+  fossil_fuels: true
+
+  land_transport_fuel_cell_share:  # Not modelled
+    2030: 0
+    2035: 0
+    2040: 0
+    2045: 0
+    2050: 0
+  land_transport_electric_share:  # included in exogenous demand
+    2030: 0
+    2035: 0
+    2040: 0
+    2045: 0
+    2050: 0
+  land_transport_ice_share:  # TODO Improve TYNDP 2024 approximations
+    2030: 0.96
+    2035: 0.82  # interpolation
+    2040: 0.68
+    2045: 0.42  # interpolation
+    2050: 0.16
+  shipping_hydrogen_share:  # included in exogenous demand  # TODO Validate assumption
+    2030: 0
+    2035: 0
+    2040: 0
+    2045: 0
+    2050: 0
+  shipping_methanol_share:  # included in exogenous demand  # TODO Validate assumption
+    2030: 0
+    2035: 0
+    2040: 0
+    2045: 0
+    2050: 0
+  shipping_oil_share:
+    2030: 0.85
+    2035: 0.65
+    2040: 0.45
+    2045: 0.2
+    2050: 0
+  bev_charge_efficiency: 0.94 # p.96 of Methodology Report TYNDP 2024
+  oil_boilers: false
+  biomass_boiler: false
+  solar_thermal: false
+  methanation: false
+  ATR: false
+  regional_co2_sequestration_potential:
+    enable: false
+  co2_sequestration_potential:
+    # Values from TYNDP 2024 Supply Tool
+    2030: 47
+    2035: 167
+    2040: 344
+  co2_spatial: false
+  co2_network: false
+  methanol:
+    methanol_to_power:
+      ocgt: false
+    biomass_to_methanol: false
+  ammonia: false
+  h2_topology_tyndp: false # ISIE
+  h2_reference_grid_source: entsoe
+  h2_zones_tyndp: false
+  h2_demand_patch_with_mm: false # ISIE
+  gas_network: false
+  gas_demand_exogenously: false # ISIE
+  biomass_spatial: false
+  biomass_to_liquid: true
+  biomass_to_liquid_cc: true
+  force_biomass_potential: true
+  force_biogas_potential: true
+  biomass_final_demand: # in TWh and for 8760h
+    2030: 939
+    2035: 863   # linear interpolation
+    2040: 787
+  electrobiofuels: false
+  transmission_efficiency:
+    enable:
+    - gas pipeline
+  imports:
+    enable: true
+    carriers:
+    - H2
+  offshore_hubs_tyndp:
+    enable: false # ISIE
+    connect_isolated: false # ISIE
+    max_capacity:
+      DC_OH: 10
+      H2 pipeline OH: 30
+
+costs:
+  custom_cost_scn: NT
+  emission_prices:
+    enable: true
+    co2:
+      # Source: Methodology report, p32
+      2030: 113.4
+      2035: 130.2 # interpolated
+      2040: 147
+      2045: 157.5 # interpolated
+      2050: 168
+
+clustering:
+  mode: custom_busshapes
+  # temporal:
+  #   resolution_sector: 6H # Adjust to suit the main function
+
+final_adjustment: false
 
 # * Move custom busmaps to
 #   ``data/busmaps/elec_s{simpl}_{clusters}_{base_network}.csv``. This allows for

@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+# SPDX-FileCopyrightText: Open Energy Transition gGmbH
+#
+# SPDX-License-Identifier: MIT
+
+tennet_network:
+  NL01: [36, 141, 270, 147]
+  NL02: [138, 165, 48, 42]
+  NL03: [144, 237, 240, 246]
+  NL04: [243, 249, 156, 159, 234]
+  NL05: [54, 198]
+  NL06: [30, 231, 216, 210]
+  NL07: [132, 222, 192, 207]
+  NL08: [343, 344, 264, 267, 345]
+  NL09: [75, 162]
+  NL10: [126, 123, 63]
+  NL11: [171, 174, 177, 180]
+  NL12: [168, 87, 90, 201, 255]
+  NL13: [117, 120]
+  # NL14: [99, 105] # No large substation, transfer to 15
+  NL15: [96, 60, 99, 105]
+  NL16: [69, 84, 81, 57, 78]
+
+offshore_buses: true
+
+res_tyndp_mapping:
+  offwind-ac-fb-r: offwind-ac
+  hydro-ror: ror
+  onwind: onwind
+  solar-pv-utility: solar
+  solar-pv-rooftop: solar rooftop
+  # dsr: False
+  offwind-dc-fb-r: offwind-dc
+  # offwind-h2-fb-oh: false
+  # offwind-dc-fb-oh: offwind-dc
+
+conv_tyndp_mapping:
+  nuclear: nuclear
+  gas-conv-old1: OCGT
+  gas-conv-old2: OCGT
+  gas-ccgt-old1: CCGT
+  gas-ccgt-old2: CCGT
+  gas-ccgt-new: CCGT
+  gas-ccgt-ccs: CCGT
+  gas-ccgt-present1: CCGT
+  gas-ccgt-present2: CCGT
+  gas-ocgt-old: OCGT
+  gas-ocgt-new: OCGT
+  coal-old1: coal
+  coal-old2: coal
+  coal-new: coal
+  coal-ccs: coal
+  lignite-old1: lignite
+  lignite-old2: lignite
+  lignite-new: lignite
+  lignite-ccs: lignite
+  oil-light: oil
+  oil-heavy-old1: oil
+  oil-heavy-old2: oil
+  oil-shale-old: oil
+  oil-shale-new: oil
+  h2-ccgt: CCGT
+

@@ -1,38 +1,35 @@
 # yaml-language-server: $schema=../schema.default.json
 # SPDX-FileCopyrightText: Contributors to Open-TYNDP <https://github.com/open-energy-transition/open-tyndp>
-# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: CC0-1.0
 
-# snakemake -call solve_sector_networks --configfile config/test/config.tyndp-isie.yaml -n
-
 run:
-  name: "test-sector-tyndp-isie"
-  disable_progressbar: true
-  shared_resources:
-    policy: false
-
-final_adjustment: true
+  name: "tyndp-isie"
+  scenarios:
+    enable: false
+    file: config/scenarios.tyndp.yaml
 
 # TODO set foresight
 foresight: myopic
 
 tyndp_scenario: NT
 
-launch_explorer: false
+launch_explorer: true
+
+final_adjustment: true
 
 scenario:
   clusters:
   - all
   planning_horizons:
   # - 2040
-  - 2050  # single run myopic
+  - 2050
 
 countries: ['AL', 'AT', 'BA', 'BE', 'BG', 'CH', 'CZ', 'CY', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GB', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'ME', 'MK', 'MT', 'NL', 'NO', 'PL', 'PT', 'RO', 'RS', 'SE', 'SI', 'SK']
 
 snapshots:
-  start: "2013-03-01"
-  end: "2013-03-08"
+  start: "2009-01-01"
+  end: "2009-12-31"  # Ignore the last day of the year to get exactly 52 weeks
 
 co2_budget:
 
@@ -41,9 +38,7 @@ electricity:
 
   extendable_carriers:
     Generator: []
-    StorageUnit: []
     Store: []
-    Link: [H2 pipeline]
 
   conventional_carriers: []
   tyndp_conventional_carriers:
@@ -90,7 +85,7 @@ electricity:
       - 2009
     fill_gaps_method: zero
     # Complete PECD data is only available for the years 2030, 2040
-    # TODO: adjust once udpated 2050 PECD data is available
+    # TODO: adjust once updated 2050 PECD data is available
     available_years:
     - 2030
     - 2040
@@ -143,19 +138,15 @@ electricity:
   constrain_dsr: true
 
 atlite:
-  default_cutout: europe-2013-03-sarah3-era5
+  default_cutout: europe-2009-sarah3-era5
   cutouts:
-    europe-2013-03-sarah3-era5:
-      time: ["2013-03-01", "2013-03-08"]
-
-renewable:
-  offwind-ac:
-    max_depth: false
-  offwind-dc:
-    max_depth: false
-  offwind-float:
-    max_depth: false
-    min_depth: false
+    europe-2009-sarah3-era5:
+      module: [sarah, era5] # in priority order
+      x: [-12., 42.]
+      y: [33., 72.]
+      dx: 0.3
+      dy: 0.3
+      time: ['2009', '2009']
 
 conventional:
   tyndp_availability_profiles: true
@@ -342,7 +333,7 @@ clustering:
     remove_stubs: false
   temporal:
     # Important note: The segmentation (SEG) option is currently not supported, for details https://github.com/open-energy-transition/open-tyndp/pull/345
-    resolution_sector: 6H
+    resolution_sector: 1H  # Use 1H for high resolution results in SB (requires commercial solver)
 
 adjustments:
   electricity: false
@@ -385,10 +376,9 @@ solving:
       carriers:
         H2: 3000
         AC: 3000
-  solver:
+  solver:  # Use commercial solver for high resolution results in SB
     name: highs
     options: highs-default
-  mem: 4000
 
 plotting:
   energy_threshold: 1.
@@ -469,7 +459,7 @@ cba:
     solving:
       solver:
         name: highs
-        options: "highs-simplex"
+        options: highs-simplex
 
   # Rolling horizon solving settings
   solving:
