@@ -21,6 +21,8 @@ tennet_network:
   NL15: [96, 60, 99, 105]
   NL16: [69, 84, 81, 57, 78]
 
+tennet_capacity: false
+
 offshore_buses: true
 
 res_tyndp_mapping:
@@ -61,3 +63,6 @@ conv_tyndp_mapping:
   oil-shale-new: oil
   h2-ccgt: CCGT
 
+store_tyndp_mapping:
+  battery: battery
+  H2 cavern-storage: H2 Store

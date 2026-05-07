@@ -92,7 +92,10 @@ if __name__ == "__main__":
         from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_tennet_busshapes", configfiles="config/config.nl-core.yaml",clusters=20, base_network="osm"
+            "build_tennet_busshapes",
+            configfiles="config/config.nl-core.yaml",
+            clusters=20,
+            base_network="osm",
         )
     set_scenario_config(snakemake)
 

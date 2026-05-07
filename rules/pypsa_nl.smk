@@ -52,7 +52,7 @@ rule create_netherland_core:
         network=resources("nl_{planning_horizons}.nc"),
     shell:
         """
-        snakemake resources/nl-core/networks/base_s_21___{wildcards.planning_horizons}_brownfield.nc --configfile config/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call
+        snakemake resources/nl-core/networks/base_s_21___{wildcards.planning_horizons}_brownfield.nc --configfile config/ISIE/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call
         mv resources/nl-core/networks/base_s_21___{wildcards.planning_horizons}_brownfield.nc {output}
         rm config.temp.yaml
         """
@@ -65,6 +65,8 @@ rule final_adjustment_myopic:
         offshore_buses=config_provider("offshore_buses"),
         res_tyndp_mapping=config_provider("res_tyndp_mapping"),
         conv_tyndp_mapping=config_provider("conv_tyndp_mapping"),
+        store_tyndp_mapping=config_provider("store_tyndp_mapping"),
+        tennet_capacity=config_provider("tennet_capacity"),
     input:
         network_nl=resources("nl_{planning_horizons}.nc"),
         network=resources(

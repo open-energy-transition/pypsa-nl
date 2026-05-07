@@ -23,7 +23,8 @@ co2_budget:
 
 electricity:
   base_network: osm
-  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, offwind-float] # solar-hsat, hydro (very small)
+  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc] # solar-hsat, hydro (very small), offwind-float
+  transmission_limit: v1.0
 
 sector:
   transport: true

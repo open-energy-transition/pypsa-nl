@@ -13,6 +13,29 @@ from scripts._helpers import (
     set_scenario_config,
 )
 
+WEIGHTING_COLS = [
+    "p_init",
+    "p_max_pu",
+    "p_min_pu",
+    "p_nom",
+    "p_nom_max",
+    "p_nom_min",
+    "p_nom_mod",
+    "p_nom_opt",
+    "p_nom_set",
+    "p_set",
+    "e_initial",
+    "e_max_pu",
+    "e_min_pu",
+    "e_nom",
+    "e_nom_max",
+    "e_nom_min",
+    "e_nom_mod",
+    "e_nom_opt",
+    "e_nom_set",
+    "e_set",
+]
+
 
 def keep_country(
     n: pypsa.Network,
@@ -213,6 +236,61 @@ def adjust_international_connection(
     return n_spatial
 
 
+def adjust_tennet_connection(
+    n: pypsa.Network,
+    tennet_capacity: dict,
+) -> pypsa.Network:
+    """
+    Adjust AC transmission line capacities in the Dutch network based on
+    specified TenneT connection capacities.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        The PyPSA network containing transmission lines and buses.
+    tennet_capacity : dict
+        Dictionary mapping bus-pair connections to transmission capacities
+        in GW. Keys must be formatted as `"bus0-bus1"` strings, independent
+        of direction.
+
+    Returns
+    -------
+    pypsa.Network
+        The modified network with updated line capacities and undefined connections removed.
+    """
+    tennet_set_capacity = {
+        frozenset(k.split("-")): v * 1000 for k, v in tennet_capacity.items()
+    }
+
+    buses = n.buses.index[n.buses.country == "NL"]
+
+    mask0 = n.lines.bus0.isin(buses)
+    mask1 = n.lines.bus1.isin(buses)
+
+    df = n.lines[(n.lines.carrier == "AC") & mask0 & mask1].copy()
+
+    # create row-wise frozenset keys
+    df["bus_set"] = [frozenset((b0, b1)) for b0, b1 in zip(df["bus0"], df["bus1"])]
+
+    # Remove networks not defined in tennet_capacity
+    missing = [
+        index
+        for index in df.index
+        if df.loc[index, "bus_set"] not in tennet_set_capacity
+    ]
+    if missing:
+        print(f"Dropping line: {missing} ")
+        df = df.drop(missing)
+        n.remove("Line", missing)
+
+    # map capacities
+    n.lines.loc[df.index, "s_nom"] = [
+        tennet_set_capacity[bus_set] for bus_set in df["bus_set"]
+    ]
+
+    return n
+
+
 def readjust_offshore_buses(
     n: pypsa.Network,
     nl: pypsa.Network,
@@ -344,8 +422,9 @@ def readjust_renewables(
 
         # attach weights
         df["weight"] = np.tile(df_spatial["weight"].values, len_values)
-        num_cols = df.select_dtypes(include="number").columns.difference(["weight"])
+        num_cols = df.columns.intersection(WEIGHTING_COLS)
         df[num_cols] = df[num_cols].mul(df["weight"], axis=0)
+        df = df.drop(columns="weight")
 
         # replace default bus with the original
         df["bus"] = df_spatial["bus"]
@@ -382,7 +461,7 @@ def readjust_conventionals(
     Returns
     -------
     pypsa.Network
-        Copy of `n_spatial` with redistributed conventional generators from `n_values`.
+        Copy of `n_spatial` with redistributed conventional links from `n_values`.
     """
 
     m = n_spatial.copy()
@@ -420,8 +499,9 @@ def readjust_conventionals(
 
         # attach weights (correct alignment!)
         df["weight"] = np.tile(df_spatial["weight"].values, len_values)
-        num_cols = df.select_dtypes(include="number").columns.difference(["weight"])
+        num_cols = df.columns.intersection(WEIGHTING_COLS)
         df[num_cols] = df[num_cols].mul(df["weight"], axis=0)
+        df = df.drop(columns="weight")
 
         # replace default bus with the original
         if tyndp_c == "h2-ccgt":
@@ -429,6 +509,88 @@ def readjust_conventionals(
         df["bus1"] = df_spatial["bus1"]
 
         m.add("Link", df.index, **df)
+
+    return m
+
+
+def retrieve_electricity_weighting(n):
+    """Extract the weightings of electricity demand"""
+    df_elec = n.loads[n.loads.carrier == "electricity"].copy()
+    df_elec.p_set = n.snapshot_weightings.objective @ n.loads_t.p_set[df_elec.index]
+    df_elec.index = df_elec.bus.map(n.buses.location)
+
+    return df_elec.p_set / df_elec.p_set.sum()
+
+
+def readjust_storages(
+    n_spatial: pypsa.Network,
+    n_values: pypsa.Network,
+    mapping: dict[str, str],
+) -> pypsa.Network:
+    """
+    Redistribute aggregated storages from `n_values` across the spatial layout of `n_spatial`.
+
+    Parameters
+    ----------
+    n_spatial : pypsa.Network
+        Spatial network providing storage locations and capacities.
+    n_values : pypsa.Network
+        Aggregated network providing storage capacities and time series.
+    mapping : dict[str, str]
+        Mapping from aggregated carrier names to spatial carrier names.
+
+    Returns
+    -------
+    pypsa.Network
+        Copy of `n_spatial` with redistributed storage from `n_values`.
+    """
+    m = n_spatial.copy()
+
+    # drop all original stores
+    carrier_drop = [c for c in mapping.values() if c]
+    index_drop = m.stores[m.stores.carrier.isin(carrier_drop)].index
+
+    m.remove("Store", index_drop)
+
+    for tyndp_c, pypsa_c in mapping.items():
+        df_values = n_values.stores[n_values.stores.carrier == tyndp_c]
+        df_spatial = n_spatial.stores[n_spatial.stores.carrier == pypsa_c].copy()
+
+        if df_values.empty or df_spatial.empty:
+            continue
+
+        # compute weights
+        weight = df_spatial["e_nom_max"].replace(np.inf, 0)
+
+        if weight.sum() == 0:
+            # If e_nom_max is not defined, use electricity demand as a proxy
+            weightings = retrieve_electricity_weighting(n_spatial)
+            weight = df_spatial.bus.map(n_spatial.buses.location).map(weightings)
+
+        df_spatial["weight"] = weight / weight.sum()
+
+        # align index naming
+        df_spatial.index = df_spatial.index.str.replace(pypsa_c, tyndp_c, regex=False)
+
+        # --- expansion ---
+        len_values = len(df_values)
+        len_spatial = len(df_spatial)
+
+        df = df_values.loc[df_values.index.repeat(len_spatial)].copy()
+
+        # assign new index (pypsa index repeated per tyndp row)
+        df.index = np.tile(df_spatial.index, len_values)
+
+        # attach weights (correct alignment!)
+        df["weight"] = np.tile(df_spatial["weight"].values, len_values)
+        num_cols = df.columns.intersection(WEIGHTING_COLS)
+        df[num_cols] = df[num_cols].mul(df["weight"], axis=0)
+        df = df.drop(columns="weight")
+
+        # replace default bus with the original
+        df["bus"] = df_spatial["bus"]
+
+        m.add("Store", df.index, **df)
 
     return m
 
@@ -456,12 +618,7 @@ def attach_h2_exogenous_demand(
         The spatial network with added H2 exogenous demand.
     """
     # Extract the weightings of electricity demand to distribute H2 demand
-    df_elec = n_spatial.loads[n_spatial.loads.carrier == "electricity"].copy()
-    df_elec.p_set = (
-        n_spatial.snapshot_weightings.objective @ n_spatial.loads_t.p_set[df_elec.index]
-    )
-    df_elec.index = df_elec.bus.map(n_spatial.buses.location)
-    weightings = df_elec.p_set / df_elec.p_set.sum()
+    weightings = retrieve_electricity_weighting(n_spatial)
 
     # Multiply H2 demand from n_values
     df_spatial = n_spatial.buses[n_spatial.buses.carrier == "H2"]
@@ -509,6 +666,10 @@ if __name__ == "__main__":
     n_ext = keep_country(n, ["NL"], include_neighbours=True)
     nl = adjust_international_connection(nl, n_ext)
 
+    tennet_capacity = snakemake.params.tennet_capacity
+    if tennet_capacity:
+        nl = adjust_tennet_connection(nl, tennet_capacity)
+
     nl = keep_country(nl, ["NL"])
     n_int = keep_country(n, ["NL"])
 
@@ -538,17 +699,18 @@ if __name__ == "__main__":
     nl.links[["bus0", "bus1"]] = nl.links[["bus0", "bus1"]].replace(country_node)
     nl.lines[["bus0", "bus1"]] = nl.lines[["bus0", "bus1"]].replace(country_node)
 
-    # Adjust and distribute TYNDP loads and powerplants but keep the values consistent
+    # Adjust and distribute TYNDP components but keep the values consistent
     nl = readjust_load(nl, n_int, carriers=["electricity"])
     nl = readjust_renewables(nl, n_int, mapping=snakemake.params.res_tyndp_mapping)
     nl = readjust_conventionals(nl, n_int, mapping=snakemake.params.conv_tyndp_mapping)
+    nl = readjust_storages(nl, n_int, mapping=snakemake.params.store_tyndp_mapping)
     nl = attach_h2_exogenous_demand(nl, n_int)
-
-    # Remove hydro storage units (none in NL)
-    nl.remove("StorageUnit", nl.storage_units.index)
 
     # Drop NL carrier components to prevent merging collition
     nl.remove("Carrier", nl.carriers.index.intersection(n.carriers.index))
+
+    # Drop NL global constraints
+    nl.remove("GlobalConstraint", nl.global_constraints.index)
 
     m = n.merge(nl)
 
