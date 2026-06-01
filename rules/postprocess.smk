@@ -161,6 +161,24 @@ if config["foresight"] != "perfect":
                 "plotting", "balance_map_interactive", w.carrier
             ),
             h2_topology_tyndp=config_provider("sector", "h2_topology_tyndp"),
+            load_shedding=config_provider(
+                "solving", "options", "load_shedding", "carriers"
+            ),
+            exclude_coupling_effects=lambda w: (
+                config_provider(
+                    "benchmarking",
+                    "tables",
+                    (
+                        "electricity_price_excl_shed"
+                        if w.carrier == "AC"
+                        else "hydrogen_price_excl_shed"
+                    ),
+                    "exclude_coupling_effects",
+                    default=False,
+                )(w)
+                if w.carrier in ("AC", "H2")
+                else False
+            ),
         input:
             network=RESULTS
             + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
@@ -494,7 +512,7 @@ rule plot_balance_timeseries:
         + "logs/plot_balance_timeseries/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.log",
     benchmark:
         RESULTS
-        +"benchmarks/performances/plot_balance_timeseries/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}"
+        + "benchmarks/performances/plot_balance_timeseries/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}"
     output:
         directory(
             RESULTS
@@ -523,7 +541,7 @@ rule plot_heatmap_timeseries:
         + "logs/plot_heatmap_timeseries/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.log",
     benchmark:
         RESULTS
-        +"benchmarks/performances/plot_heatmap_timeseries/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}"
+        + "benchmarks/performances/plot_heatmap_timeseries/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}"
     output:
         directory(
             RESULTS
@@ -628,7 +646,7 @@ rule plot_interactive_bus_balance:
         + "logs/plot_interactive_bus_balance/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.log",
     benchmark:
         RESULTS
-        +"benchmarks/performances/plot_interactive_bus_balance/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}"
+        + "benchmarks/performances/plot_interactive_bus_balance/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}"
     resources:
         mem_mb=20000,
     script:

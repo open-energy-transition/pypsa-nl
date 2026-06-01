@@ -81,6 +81,7 @@ autodoc_mock_imports = [
     "dask.distributed",
     "pydantic",
     "ruamel",
+    "git",
 ]
 
 autodoc_default_flags = ["members"]
@@ -113,7 +114,7 @@ author = "PyPSA-Eur and Open-TYNDP Contributors"
 # built documents.
 #
 # The short X.Y version.
-version = "v0.6.1"
+version = "v0.7.1"
 # The full version, including alpha/beta/rc tags.
 release = version + ""
 

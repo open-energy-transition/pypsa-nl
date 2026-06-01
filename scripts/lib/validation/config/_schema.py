@@ -100,11 +100,15 @@ class ConfigSchema(BaseModel):
 
     # Top-level fields (from TopLevelConfig)
     version: str = Field(
-        "v0.6.1", description="Version of Open-TYNDP. Descriptive only."
+        "v0.7.1", description="Version of Open-TYNDP. Descriptive only."
     )
     tutorial: bool = Field(
         False,
         description="Switch to retrieve the tutorial data set instead of the full data set.",
+    )
+    data_config: str | None = Field(
+        None,
+        description="Switch for loading a config file 'config/data.{data_config}.yaml' for default data sources.",
     )
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig,

@@ -8,6 +8,7 @@ Create interactive energy balance maps for the defined carriers using `n.explore
 import geopandas as gpd
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pydeck as pdk
 import pypsa
@@ -17,6 +18,7 @@ from shapely.geometry import box
 
 from scripts._helpers import (
     configure_logging,
+    get_version,
     set_scenario_config,
     update_config_from_wildcards,
 )
@@ -126,6 +128,48 @@ def dissolve_h2_regions_tyndp(regions: gpd.GeoDataFrame, buses_h2_fn: str):
     return regions
 
 
+def add_buttons(html_file: str, version: str) -> None:
+    """
+    Add a reset, fullscreen and version label
+
+    Parameters
+    ----------
+    html_file: str
+        Path to the HTML file
+    version : str
+    """
+    reset_button = (
+        '<button onclick="window.location.reload()" '
+        'style="position:fixed;top:10px;left:10px;z-index:9999;'
+        "padding:4px 10px;background:white;border:1px solid #aaa;"
+        'border-radius:4px;cursor:pointer;font-size:11px;font-weight:bold">'
+        "&#8634; Reset Zoom"
+        "</button>"
+    )
+
+    fullscreen_button = (
+        '<button onclick="document.documentElement.requestFullscreen()" '
+        'style="position:fixed;top:10px;left:115px;z-index:9999;'
+        "padding:2.1px 10px;background:white;border:1px solid #aaa;"
+        'border-radius:4px;cursor:pointer;font-size:10px" '
+        'title="Fullscreen">&#x26F6;</button>'
+    )
+
+    version_label = (
+        '<div style="position:fixed;bottom:8px;right:8px;z-index:9999;'
+        'font-size:10px;color:grey;pointer-events:none">' + version + "</div>"
+    )
+
+    with open(html_file) as f:
+        html = f.read()
+    map_additions = "\n".join([reset_button, fullscreen_button, version_label])
+    html = html.replace("</body>", map_additions + "\n<body>")
+    html = html.replace(">label:<", ">Technology:<")
+    html = html.replace(">size:<", ">Gen/Demand (TWh):<")
+    with open(html_file, "w") as f:
+        f.write(html)
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
@@ -145,6 +189,8 @@ if __name__ == "__main__":
 
     # Interactive map settings
     settings = snakemake.params.settings
+    load_shedding = snakemake.params.load_shedding
+    exclude_coupling_effects = snakemake.params.exclude_coupling_effects
     unit_conversion = settings["unit_conversion"]
     cmap = settings["cmap"]
     region_alpha = settings["region_alpha"]
@@ -156,6 +202,7 @@ if __name__ == "__main__":
     map_style = settings.get("map_style")
     map_style = VALID_MAP_STYLES.get(map_style, "road")
     tooltip = settings["tooltip"]
+    ndigits = settings.get("ndigits")
 
     # Import
     n = pypsa.Network(snakemake.input.network)
@@ -167,9 +214,7 @@ if __name__ == "__main__":
     carrier = snakemake.wildcards.carrier
     carrier = carrier.replace("_", " ")
     regions = gpd.read_file(snakemake.input.regions).set_index("name")
-    regions.geometry = regions.geometry.simplify(
-        0.02
-    )  # reduces file size (0.01 to 0.02 delivers small gains)
+    regions.geometry = regions.geometry.simplify(0.05)  # reduces file size
 
     if carrier == "H2" and snakemake.params.h2_topology_tyndp:
         regions = dissolve_h2_regions_tyndp(regions, snakemake.input.buses_h2)
@@ -198,6 +243,15 @@ if __name__ == "__main__":
     eb = eb.dropna()
     bus_size = eb.groupby(level=["bus", "carrier"]).sum()
 
+    # Rename carriers to nice names for pie charts
+    nice_names = n.carriers.nice_name[n.carriers.nice_name != ""].dropna()
+    for orig, nice in nice_names.items():
+        if nice not in n.carriers.index:
+            n.carriers.loc[nice] = n.carriers.loc[orig]
+    bus_size = (
+        bus_size.rename(nice_names, level="carrier").groupby(["bus", "carrier"]).sum()
+    )
+
     # line and links widths according to optimal capacity
     flow = n.statistics.transmission(groupby=False, bus_carrier=carrier, at_port=0)
     if not flow.empty:
@@ -212,11 +266,13 @@ if __name__ == "__main__":
         flow.loc[flow.index.get_level_values(0).str.contains("Line")]
         .copy()
         .droplevel(0)
+        .astype(float)
     )
     link_flow = (
         flow.loc[flow.index.get_level_values(0).str.contains("Link")]
         .copy()
         .droplevel(0)
+        .astype(float)
     )
 
     branch_components = ["Link"]
@@ -238,12 +294,24 @@ if __name__ == "__main__":
     )
 
     weights = n.snapshot_weightings.generators
-    price = (
-        weights
-        @ n.buses_t.marginal_price.reindex(buses, axis=1).rename(
-            n.buses.location, axis=1
+
+    voll = load_shedding.get(carrier, np.inf)
+    if exclude_coupling_effects:
+        other_carrier = "AC" if carrier == "H2" else "H2"
+        coupling_carrier = "h2-ccgt" if carrier == "H2" else "H2 Electrolysis"
+        voll = min(
+            voll,
+            load_shedding.get(other_carrier, np.inf)
+            * n.links.loc[n.links.carrier == coupling_carrier].efficiency.mean(),
         )
-        / weights.sum()
+
+    price = (
+        n.buses_t.marginal_price.reindex(buses, axis=1)
+        .rename(n.buses.location, axis=1)
+        .where(
+            lambda x: x < voll * 0.98
+        )  # Add 2% of numerical tolerance; comment out to incl. load shedding
+        .pipe(lambda x: (weights @ x.fillna(0)) / (weights @ x.notna()))
     )
 
     if carrier == "co2 stored" and "CO2Limit" in n.global_constraints.index:
@@ -258,7 +326,7 @@ if __name__ == "__main__":
         regions["price"] = price.reindex(regions.index).fillna(0)
         shift = 0
 
-    vmin, vmax = regions.price.min() - shift, regions.price.max() + shift
+    vmin, vmax = regions.price.min() - shift, regions.price.quantile(0.97) + shift
     if settings["vmin"] is not None:
         vmin = settings["vmin"]
     if settings["vmax"] is not None:
@@ -280,8 +348,8 @@ if __name__ == "__main__":
         "<b>"
         + regions.index
         + "</b><br>"
-        + "<b>Weighted price:</b> "
-        + regions["price"].round(2).astype(str)
+        + "<b>Time-weighted avg. price (excl. load shedding):</b> "
+        + pd.to_numeric(regions["price"], errors="coerce").round(2).astype(str)
         + " "
         + region_unit
     )
@@ -301,13 +369,13 @@ if __name__ == "__main__":
 
     map = n.explore(
         branch_components=branch_components,
-        bus_size=bus_size.div(unit_conversion),
+        bus_size=bus_size.div(unit_conversion).round(ndigits),
         bus_split_circle=True,
-        line_width=line_flow.div(unit_conversion),
-        line_flow=line_flow.div(unit_conversion),
+        line_width=line_flow.div(unit_conversion).round(ndigits),
+        line_flow=line_flow.div(unit_conversion).round(ndigits),
         line_color="rosybrown",
-        link_width=link_flow.div(unit_conversion),
-        link_flow=link_flow.div(unit_conversion),
+        link_width=link_flow.div(unit_conversion).round(ndigits),
+        link_flow=link_flow.div(unit_conversion).round(ndigits),
         link_color=branch_color,
         arrow_size_factor=arrow_size_factor,
         tooltip=tooltip,
@@ -319,4 +387,5 @@ if __name__ == "__main__":
 
     map.layers.insert(0, regions_layer)
 
-    map.to_html(snakemake.output[0], offline=True)
+    map.to_html(snakemake.output[0], offline=False)
+    add_buttons(snakemake.output[0], get_version())
