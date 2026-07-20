@@ -5,7 +5,6 @@
 
 <a id="config"></a>
 
-# 
 # Configuration
 
 PyPSA-Eur has several configuration options which are documented in this section.
@@ -571,7 +570,7 @@ Only used for sector-coupling studies.
 ??? note "Details"
 
     Configuration for `sector` settings.
-    
+
     | Property | Type | Default | Description |
     |----------|------|---------|-------------|
     | `transport` | boolean | `true` | Flag to include transport sector. |
@@ -754,7 +753,7 @@ Only used for sector-coupling studies.
     |   `limit` | number |  | Maximum allowed renewable energy imports (TWh). |
     |   `limit_sense` | string | `<=` | Sense of the limit. |
     |   `price` | dict (str -> number) |  | Price for importing renewable energy of carrier. |
-    
+
 
 **YAML Syntax**
 
@@ -874,22 +873,23 @@ as their source.
 ## `data` {#data_cf}
 
 Controls which versions of input data are used for building the model.
-Versions that are available for each dataset can be found in `data/versions.csv`.
+Versions that are available for each dataset can be found in the following files: `data/versions.csv` for generic PyPSA-Eur data, and `data/tyndp_versions.csv` for TYNDP-specific data.
 By default, we retrieve the `latest` supported version for each dataset from an archive source
 (`data.pypsa.org`).
 This means that when upgrading between Open-TYNDP versions, new versions of input data may also be downloaded and used.
-To freeze a model to a specific version of input data, you can set a specific version in the `version` field for each dataset to one specific version as listed in `data/versions.csv`.
+To freeze a model to a specific version of input data, you can set a specific version in the `version` field for each dataset to one specific version as listed in `data/versions.csv` or `data/tyndp_versions.csv`.
 
 Some datasets support `primary` or `build` as a source option, meaning that the data can be retrieved from the original
 data source or build it from the latest available data.
 Datasets that are mirrored to the Open-TYNDP data store on Google Cloud Storage also support `tyndp-archive` as a source
 (see [tyndp_archive](solving.md#tyndp_archive)).
-See the `data/versions.csv` file for all available datasets and their sources/versions that are supported.
+See the `data/versions.csv` and `data/tyndp_versions.csv` files for all available datasets and their sources/versions that are supported.
 
-??? note "Details"
+In your own project, you can define additional version files to modify the contents of `data/tyndp_versions.csv`.
+See the [data versioning documentation](data_sources.md#managing_data_versions) for more details.
 
-    Configuration for `data` settings.
-    
+??? note "Configuration for `data` settings."
+
     | Property | Type | Default | Description |
     |----------|------|---------|-------------|
     | `hotmaps_industrial_sites` | any |  | Configuration for a single data source. |
@@ -1069,7 +1069,7 @@ See the `data/versions.csv` file for all available datasets and their sources/ve
     | `bidding_zones_entsoepy` | any |  | Configuration for a single data source. |
     |   `source` | enum (`archive`, `primary`, `build`) | `archive` | Source of the data. 'archive' retrieves pre-built data, 'primary' retrieves from primary source. |
     |   `version` | string | `latest` | Version of the data to use. Uses the specific 'version' for the selected 'source' or the dataset tagged 'latest' for this source. |
-    
+
 
 **YAML Syntax**
 

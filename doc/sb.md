@@ -79,7 +79,7 @@ a scenario output file from the TYNDP 2024 process used as a fixed input.
 
 The SB workflow transforms raw ENTSO-E input datasets into a solved, sector-coupled PyPSA
 network. The key stages are: integrating public input data, constructing the sector-coupled
-network, applying TYNDP-specific constraints, solving the capacity expansion optimisation, visualising results, and running the Open-TYNDP [benchmarking framework](benchmarking.md).
+network, applying TYNDP-specific constraints, solving the capacity expansion optimisation, visualising results, and running the Open-TYNDP [benchmarking framework](benchmarking.md). An overview of the SB rules is documented at [SB rules](sb_rules.md).
 
 ### Network Construction
 
@@ -194,7 +194,7 @@ This loads `config/data.tyndp.yaml`, which switches all mirrored datasets to `ty
 A small number of datasets (`wdpa`, `cutout`, `open_tyndp_prelim`) are not yet available
 on the GCS bucket and will still be retrieved from their respective sources.
 
-To see which datasets support `tyndp-archive`, check the `source` column in `data/versions.csv`.
+To see which datasets support `tyndp-archive`, check the `source` column in `data/tyndp_versions.csv`.
 See also [`data_config`](configuration.md#data_config_cf) and [`data`](configuration.md#data_cf) in the configuration reference.
 
 ## Running Scenario Building
