@@ -11,12 +11,12 @@ configfile: "config/ISIE/pypsa-nl.yaml"
 rule build_tennet_busshapes:
     message:
         "Building the busshape based on TenneT"
-    params:
-        tennet_network=config_provider("tennet_network"),
     input:
         admin_shapes=resources("admin_shapes.geojson"),
-        pocketsWGS="data/tennet/Target Grid Map 2 0 WGS ArcGisOnline - PocketsWGS.geojson",
+        archetypen_buurten="data/ISIE/archetypen_buurten.geojson",
+        pockets_traces="data/ISIE/pockets_traces.geojson",
     output:
+        pockets_archetypes=resources("pockets_archetypes_{clusters}_{base_network}.geojson"),
         busshape="data/busshapes/base_s_{clusters}_{base_network}.geojson",
     # log:
     #     logs("build_tennet_busshapes_{clusters}_{base_network}.log"),

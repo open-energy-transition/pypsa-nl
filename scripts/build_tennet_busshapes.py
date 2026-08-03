@@ -6,85 +6,88 @@
 import geopandas as gpd
 import pandas as pd
 
+from shapely.geometry import Polygon
+from shapely import union_all
+
 from scripts._helpers import (
     set_scenario_config,
 )
 
+def fill_gdf_holes(gdf: gpd.GeoDataFrame, gdf_nl: gpd.GeoDataFrame):
 
-def merge_small_polygons(gdf, area_threshold, prefer_touching=True, fix_invalid=True):
-    """
-    Merge polygons smaller than area_threshold into their closest neighbor.
+    merged = union_all(gdf.geometry)
 
-    Parameters
-    ----------
-    gdf : GeoDataFrame
-        Input polygons (must have a valid geometry column)
-    area_threshold : float
-        Minimum area; polygons smaller than this will be merged
-    prefer_touching : bool
-        If True, merge with touching neighbors first; otherwise use nearest only
-    fix_invalid : bool
-        If True, apply buffer(0) to fix invalid geometries after merges
+    holes = [
+        Polygon(hole)
+        for poly in (merged.geoms if merged.geom_type == "MultiPolygon" else [merged])
+        for hole in poly.interiors
+    ]
 
-    Returns
-    -------
-    GeoDataFrame
-        Cleaned GeoDataFrame with small polygons merged
-    """
+    gdf_holes = gpd.GeoDataFrame(geometry=holes, crs=gdf.crs)
+    gdf_holes = gpd.overlay(
+        gdf_nl,
+        gdf_holes,
+        how="intersection"
+    )[["geometry"]].reset_index(drop=True)
 
-    # Work on a copy
-    gdf = gdf.copy()
-    gdf = gdf.to_crs(3857)
+    patch_codes = [f"PATCH{i}" for i in gdf_holes.index]
 
-    # Ensure projected CRS (area in meters, not degrees)
-    # if gdf.crs and gdf.crs.is_geographic:
-    #     raise ValueError("GeoDataFrame must be in a projected CRS (not EPSG:4326)")
+    gdf_holes["statcode"] = patch_codes
+    gdf_holes["BU_code"] = patch_codes
+    gdf_holes["id"] = None
+    gdf_holes["archetype"] = 0
+    gdf_holes = gdf_holes.set_index("statcode")
 
-    def find_best_neighbor(idx):
-        geom = gdf.loc[idx].geometry
+    gdf_updated = pd.concat([gdf,gdf_holes])
 
-        # Try touching neighbors first
-        if prefer_touching:
-            touching = gdf[gdf.geometry.touches(geom)].drop(idx, errors="ignore")
-            if not touching.empty:
-                # choose the largest neighbor (more stable)
-                return touching["Shape__Area"].idxmax()
+    return gdf_updated
 
-        # Fallback: nearest neighbor
-        distances = gdf.geometry.distance(geom)
-        distances = distances.drop(idx)
-        return distances.idxmin()
 
-    # Process smallest polygons first
-    while True:
-        small = gdf[gdf["Shape__Area"] < area_threshold]
+def dissolve_shapes_using_lasso(gdf: gpd.GeoDataFrame, gdf_lasso: gpd.GeoDataFrame):
 
-        if small.empty:
-            break
+    # Use a projected CRS for accurate area calculations
+    gdf_proj = gdf.to_crs(3857)
+    gdf_lasso_proj = gdf_lasso.to_crs(3857)
 
-        # pick smallest polygon
-        idx = small["Shape__Area"].idxmin()
+    # Save original polygon index and area
+    gdf_proj = gdf_proj.reset_index(names="orig_idx")
+    gdf_proj["orig_area"] = gdf_proj.geometry.area
 
-        # find neighbor
-        neighbor_idx = find_best_neighbor(idx)
+    # Compute intersections
+    intersection = gpd.overlay(
+        gdf_lasso_proj,
+        gdf_proj,
+        how="intersection"
+    )
 
-        # merge geometries
-        new_geom = gdf.loc[idx].geometry.union(gdf.loc[neighbor_idx].geometry)
+    # Calculate overlap ratio relative to the original polygon
+    intersection["overlap_ratio"] = (
+        intersection.geometry.area / intersection["orig_area"]
+    )
 
-        # assign merged geometry to neighbor
-        gdf.at[neighbor_idx, "geometry"] = new_geom
+    # Keep only intersections covering >= 50%
+    matches = intersection[intersection["overlap_ratio"] >= 0.5]
 
-        # drop the small polygon
-        gdf = gdf.drop(idx)
+    for idx, row in matches.iterrows():
+        gdf_idx = row["BU_code"]
+        gdf.loc[gdf_idx, "pockets"] = row["name"]
 
-        # recompute area
-        gdf["Shape__Area"] = gdf.geometry.area
 
-        # optionally fix invalid geometries
-        if fix_invalid:
-            gdf["geometry"] = gdf.buffer(0)
+    # Count archetype frequencies per pocket
+    archetype_counts = (
+        gdf.groupby(["pockets", "archetype"])
+        .size()
+        .unstack(fill_value=0)
+        .add_prefix("archetype_")
+    )
 
-    return gdf.to_crs(4326)
+    # Dissolve geometries by pockets
+    pocket_gdf = gdf.dissolve(by="pockets")[["geometry"]]
+
+    # Add archetype frequency columns
+    pocket_gdf = pocket_gdf.join(archetype_counts)
+
+    return pocket_gdf
 
 
 if __name__ == "__main__":
@@ -99,34 +102,26 @@ if __name__ == "__main__":
         )
     set_scenario_config(snakemake)
 
-    # 1. Retrieve and build the Tennet subdivision
-    gdf_nl = gpd.read_file(snakemake.input.pocketsWGS)
-    gdf_nl["country"] = "NL"
+    # 1. Retrieve relevant GeoDataFrames
+    gdf_buurten = gpd.read_file(snakemake.input.archetypen_buurten).set_index("statcode")
+    gdf = gpd.read_file(snakemake.input.admin_shapes)
+    gdf_traces = gpd.read_file(snakemake.input.pockets_traces)
 
-    # Remove missing province
-    gdf_nl = gdf_nl[~gdf_nl.provincie.isna()]
+    # 2. Split NL from the admin shapes
+    gdf = gdf.rename(columns={"admin": "name"})[["name", "country", "geometry"]]
+    gdf_nl = gdf[gdf["country"] == "NL"]
+    gdf_wo_nl = gdf[gdf["country"] != "NL"]
 
-    # Merge small regions
-    gdf_nl = merge_small_polygons(gdf_nl, area_threshold=1e8)
+    # 3. Fill the gaps in the Buurten gdf but stick only to NL land shapes 
+    gdf_buurten = fill_gdf_holes(gdf_buurten, gdf_nl)
 
-    # Invert the dictionary: objectid -> network name
-    tennet_network = snakemake.params.tennet_network
+    # 4. Dissolve the Buurten using the pocket traces, save them for other uses
+    gdf_pockets = dissolve_shapes_using_lasso(gdf_buurten, gdf_traces)
+    gdf_pockets.to_file(snakemake.output.pockets_archetypes)
 
-    id_to_network = {
-        obj_id: network_name
-        for network_name, ids in tennet_network.items()
-        for obj_id in ids
-    }
+    # 5. Merged NL that includes the pockets with other countries and save them as busshapes
+    gdf_nl_pockets = gdf_pockets[["geometry"]].reset_index().rename(columns={"pockets": "name"})
+    gdf_nl_pockets["country"] = "NL"
 
-    gdf_nl["name"] = gdf_nl.OBJECTID.map(id_to_network).fillna(gdf_nl["OBJECTID"])
-    gdf_nl = gdf_nl.dissolve("name")[["country", "geometry"]].reset_index()
-
-    # 2. Retrieve the admin_shapes and take out NL
-    gdf = gpd.read_file(snakemake.input.admin_shapes).rename(columns={"admin": "name"})[
-        ["name", "country", "geometry"]
-    ]
-    gdf = gdf[gdf["country"] != "NL"]
-
-    # 3. Combine and save
-    gdf_new = pd.concat([gdf, gdf_nl]).reset_index(drop=True)
+    gdf_new = pd.concat([gdf_wo_nl, gdf_nl_pockets]).reset_index(drop=True)
     gdf_new.to_file(snakemake.output.busshape)
