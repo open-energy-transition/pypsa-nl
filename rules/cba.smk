@@ -53,7 +53,7 @@ if (CBA_NON_CO2_DATASET := dataset_version("tyndp_cba_non_co2_emissions"))[
         input:
             file=storage(CBA_NON_CO2_DATASET["url"]),
         output:
-            file=f"{CBA_NON_CO2_DATASET["folder"]}/a.3_non-co2-emissions.csv",
+            file=f"{CBA_NON_CO2_DATASET['folder']}/a.3_non-co2-emissions.csv",
         log:
             "logs/retrieve_tyndp_cba_non_co2_emissions.log",
         run:
@@ -343,7 +343,12 @@ rule solve_cba_msv_extraction:
         solver=RESULTS + "logs/cba/msv/{planning_horizons}_solver.log",
         memory=RESULTS + "logs/cba/msv/{planning_horizons}_memory.log",
         python=RESULTS + "logs/cba/msv/{planning_horizons}_python.log",
-    threads: solver_threads
+    threads: msv_solver_threads
+    resources:
+        mem_mb=config_provider("cba", "msv_extraction", "solving", "mem_mb"),
+        runtime=config_provider(
+            "cba", "msv_extraction", "solving", "runtime", default="12h"
+        ),
     params:
         solving=config_provider("solving"),
         cba_solving=config_provider("cba", "msv_extraction", "solving"),
@@ -589,7 +594,7 @@ def summary_benchmark_indicators(w):
             run=[run],
         )
     return expand(
-        rules.collect_indicators.output.indicators,
+        rules.combine_indicators.output.indicators,
         planning_horizons=[w.planning_horizons],
         run=[run],
     )
