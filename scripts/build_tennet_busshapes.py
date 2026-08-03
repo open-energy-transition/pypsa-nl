@@ -117,7 +117,7 @@ if __name__ == "__main__":
 
     # 4. Dissolve the Buurten using the pocket traces, save them for other uses
     gdf_pockets = dissolve_shapes_using_lasso(gdf_buurten, gdf_traces)
-    gdf_pockets.to_file(snakemake.output.pockets_archetypes)
+    gdf_pockets.to_file("data/ISIE/pockets_with_archetypes.geojson")
 
     # 5. Merged NL that includes the pockets with other countries and save them as busshapes
     gdf_nl_pockets = gdf_pockets[["geometry"]].reset_index().rename(columns={"pockets": "name"})

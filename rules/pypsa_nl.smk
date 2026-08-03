@@ -16,7 +16,7 @@ rule build_tennet_busshapes:
         archetypen_buurten="data/ISIE/archetypen_buurten.geojson",
         pockets_traces="data/ISIE/pockets_traces.geojson",
     output:
-        pockets_archetypes=resources("pockets_archetypes_{clusters}_{base_network}.geojson"),
+        # pockets_archetypes=resources("pockets_archetypes_{clusters}_{base_network}.geojson"),
         busshape="data/busshapes/base_s_{clusters}_{base_network}.geojson",
     # log:
     #     logs("build_tennet_busshapes_{clusters}_{base_network}.log"),
@@ -45,7 +45,7 @@ rule create_netherland_core:
         "Build an unsolved, high-resolution, electricity-only model for the Netherlands"
     input:
         check=align_configuration,
-        config="config/config.nl-core.yaml",
+        config="config/ISIE/config.nl-core.yaml",
     params:
         resolution_sector=config_provider("clustering", "temporal", "resolution_sector"),
     output:
