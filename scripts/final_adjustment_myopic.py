@@ -310,7 +310,9 @@ def readjust_offshore_buses(
     pypsa.Network
         The modified spatial network.
     """
-    H2_pipeline_GB = nl.links.loc[nl.links.bus0 == "GB H2"].index[0]
+    H2_pipeline_GB = nl.links.loc[
+        (nl.links.bus0 == "GBAC H2") & (nl.links.bus1 == "NL10AC H2")
+    ].index[0]
 
     n.links.loc["NLOH001-NL00-Offshore DC", "bus1"] = nl.links.loc[
         "relation/14126301-450-DC", "bus1"
@@ -505,7 +507,7 @@ def readjust_conventionals(
 
         # replace default bus with the original
         if tyndp_c == "h2-ccgt":
-            df["bus0"] = df_spatial["bus1"].str[:4] + df["bus0"].str[2:]
+            df["bus0"] = df_spatial["bus1"] + df["bus0"].str[2:]
         df["bus1"] = df_spatial["bus1"]
 
         m.add("Link", df.index, **df)
@@ -688,16 +690,27 @@ if __name__ == "__main__":
         n = drop_country(n, ["NL"])
 
     # Readjust name scheme in NL model
-    country_node = {
-        "BE": "BE00",
-        "DE": "DE00",
-        "GB": "GB00",
-        "DK": "DKE1",
-        "NO": "NOS0",
+    replacements = {
+        "BEAC H2": "BE H2",
+        "BEAC": "BE00",
+        "DEAC H2": "DE H2",
+        "DEAC": "DE00",
+        "DKAC H2": "DK H2",
+        "DKAC": "DKW1",
+        "GBAC H2": "GB H2",
+        "GBAC": "GB00",
+        "NOAC H2": "NO H2",
+        "NOAC": "NOS0"
     }
 
-    nl.links[["bus0", "bus1"]] = nl.links[["bus0", "bus1"]].replace(country_node)
-    nl.lines[["bus0", "bus1"]] = nl.lines[["bus0", "bus1"]].replace(country_node)
+    for c in nl.components[["Link", "Line"]]:
+        for bus in ["bus0","bus1"]:
+
+            c.static[bus] = c.static[bus].str.replace(
+                "|".join(replacements),
+                lambda m: replacements[m.group()],
+                regex=True,
+            )
 
     # Adjust and distribute TYNDP components but keep the values consistent
     nl = readjust_load(nl, n_int, carriers=["electricity"])
@@ -713,5 +726,9 @@ if __name__ == "__main__":
     nl.remove("GlobalConstraint", nl.global_constraints.index)
 
     m = n.merge(nl)
+
+    # Postmerge adjustement to avoid warnings
+    m.loads_t.p_set.fillna(m.loads.p_set, inplace=True)
+    m.lines.drop(["r", "x", "b"], axis=1, inplace=True)
 
     m.export_to_netcdf(snakemake.output.network)

@@ -34,7 +34,8 @@ from pathlib import Path
 import pandas as pd
 import pypsa
 
-from scripts._helpers import configure_logging, set_scenario_config
+from scripts._helpers import configure_logging, get_version, set_scenario_config
+from scripts.cba.prepare_project import load_method
 from scripts.prepare_sector_network import get
 
 logger = logging.getLogger(__name__)
@@ -76,19 +77,19 @@ CARRIER_TO_EMISSION_FACTORS = {
 def _apply_original_costs(n, remove_noisy_costs: bool) -> None:
     if not remove_noisy_costs:
         return
-    for t in n.iterate_components():
-        if "marginal_cost_original" in t.static:
-            mask = t.static["marginal_cost_original"].notna()
-            t.static.loc[mask, "marginal_cost"] = t.static.loc[
+    for c in n.components:
+        if "marginal_cost_original" in c.static:
+            mask = c.static["marginal_cost_original"].notna()
+            c.static.loc[mask, "marginal_cost"] = c.static.loc[
                 mask, "marginal_cost_original"
-            ].astype(t.static["marginal_cost"].dtype)
+            ].astype(c.static["marginal_cost"].dtype)
 
-    for t in n.iterate_components(["Line", "Link"]):
-        if "capital_cost_original" in t.static:
-            mask = t.static["capital_cost_original"].notna()
-            t.static.loc[mask, "capital_cost"] = t.static.loc[
+    for c in n.components[["Line", "Link"]]:
+        if "capital_cost_original" in c.static:
+            mask = c.static["capital_cost_original"].notna()
+            c.static.loc[mask, "capital_cost"] = c.static.loc[
                 mask, "capital_cost_original"
-            ].astype(t.static["capital_cost"].dtype)
+            ].astype(c.static["capital_cost"].dtype)
 
 
 def calculate_total_system_cost(
@@ -128,18 +129,6 @@ def calculate_total_system_cost(
         "capex": capex,
         "opex": opex,
     }
-
-
-def check_method(method: str) -> str:
-    """
-    Normalize and validate the CBA method name.
-
-    If the method is not recognized as either "pint" or "toot", a ValueError is raised.
-    """
-    method = method.lower()
-    if method not in ["pint", "toot"]:
-        raise ValueError(f"Method must be 'pint' or 'toot', got: {method}")
-    return method
 
 
 def difference_by_method(reference: float, project: float, method: str) -> float:
@@ -999,16 +988,10 @@ if __name__ == "__main__":
     # Detect method from assignments (toot or pint)
     cba_project = snakemake.wildcards.cba_project
     project_id = int(cba_project[1:])
-    methods = pd.read_csv(snakemake.input.methods)
-    method_row = methods[
-        (methods["project_id"] == project_id)
-        & (methods["planning_horizon"] == planning_horizon)
-    ]
-    if method_row.empty:
-        raise ValueError(
-            f"Missing CBA method for project {project_id} and horizon {planning_horizon}"
-        )
-    method = check_method(method_row["method"].iloc[0])
+    project_type = "storage" if cba_project.startswith("s") else "transmission"
+    method = load_method(
+        snakemake.input.methods, project_id, project_type, planning_horizon
+    )
 
     # Calculate indicators
     indicators = {}
@@ -1130,4 +1113,9 @@ if __name__ == "__main__":
         )
 
     df["cyear"] = int(reference_cyears[0])
+
+    # Get version
+    version = get_version()
+    df["version"] = version
+
     df.to_csv(snakemake.output.indicators, index=False)

@@ -52,6 +52,7 @@ rule create_netherland_core:
         network=resources("nl_{planning_horizons}.nc"),
     shell:
         """
+        snakemake resources/nl-core/networks/base_s_21___{wildcards.planning_horizons}_brownfield.nc --configfile config/ISIE/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call --unlock
         snakemake resources/nl-core/networks/base_s_21___{wildcards.planning_horizons}_brownfield.nc --configfile config/ISIE/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call
         mv resources/nl-core/networks/base_s_21___{wildcards.planning_horizons}_brownfield.nc {output}
         rm config.temp.yaml

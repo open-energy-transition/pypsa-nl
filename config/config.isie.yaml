@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../schema.default.json
+# SPDX-FileCopyrightText: Contributors to Open-TYNDP <https://github.com/open-energy-transition/open-tyndp>
+#
+# SPDX-License-Identifier: CC0-1.0
+
+# snakemake solve_sector_networks --configfile config/config.tyndp.yaml config/config.isie.yaml -n
+
+# snakemake solve_sector_networks --configfile config/test/config.tyndp.yaml config/config.isie.yaml -n
+# pixi shell -e open-tyndp
+
+run:
+  name: "tyndp-isie-update"
+  scenarios:
+    enable: false
+    file: config/scenarios.tyndp.yaml
+
+scenario:
+  clusters:
+  - all
+  planning_horizons:
+  # - 2040
+  - 2050  # single run myopic
+
+# TODO set foresight
+foresight: myopic
+
+tyndp_scenario: NT
+
+launch_explorer: true
+
+final_adjustment: true
+
+solving:
+  solver:  # Use commercial solver for high resolution results in SB
+    name: gurobi
+    options: gurobi-default
