@@ -6,17 +6,23 @@
 import geopandas as gpd
 import pandas as pd
 
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPolygon
 from shapely import union_all
 
 from scripts._helpers import (
     set_scenario_config,
 )
 
+def largest_polygon(geom):
+    if isinstance(geom, MultiPolygon):
+        return max(geom.geoms, key=lambda g: g.area)
+    return geom
+
 def fill_gdf_holes(gdf: gpd.GeoDataFrame, gdf_nl: gpd.GeoDataFrame):
 
     merged = union_all(gdf.geometry)
 
+    # Extract holes
     holes = [
         Polygon(hole)
         for poly in (merged.geoms if merged.geom_type == "MultiPolygon" else [merged])
@@ -24,11 +30,31 @@ def fill_gdf_holes(gdf: gpd.GeoDataFrame, gdf_nl: gpd.GeoDataFrame):
     ]
 
     gdf_holes = gpd.GeoDataFrame(geometry=holes, crs=gdf.crs)
+    gdf_holes["orig_area"] = gdf_holes.to_crs(3857).geometry.area
+
+    # Prevent overlays with existing shapes (island within shapes)
+    gdf_holes = gpd.overlay(
+        gdf_holes,
+        gdf,
+        how="difference"
+    )
+
+    # Filter out large bodies of water
     gdf_holes = gpd.overlay(
         gdf_nl,
         gdf_holes,
         how="intersection"
-    )[["geometry"]].reset_index(drop=True)
+    )
+
+    # Retain only the largest polygon
+    gdf_holes["geometry"] = gdf_holes.geometry.apply(largest_polygon)
+
+    # Drop patches with area loss larger than 99%
+    gdf_holes["new_area"] = gdf_holes.to_crs(3857).geometry.area
+    gdf_holes["subtract_ratio"] = gdf_holes["new_area"]/ gdf_holes["orig_area"]
+    gdf_holes = gdf_holes[gdf_holes["subtract_ratio"] > 0.01]
+
+    gdf_holes = gdf_holes[["geometry"]].reset_index(drop=True)
 
     patch_codes = [f"PATCH{i}" for i in gdf_holes.index]
 
@@ -113,10 +139,10 @@ if __name__ == "__main__":
     gdf_wo_nl = gdf[gdf["country"] != "NL"]
 
     # 3. Fill the gaps in the Buurten gdf but stick only to NL land shapes 
-    gdf_buurten = fill_gdf_holes(gdf_buurten, gdf_nl)
+    gdf_buurten_patch = fill_gdf_holes(gdf_buurten, gdf_nl)
 
     # 4. Dissolve the Buurten using the pocket traces, save them for other uses
-    gdf_pockets = dissolve_shapes_using_lasso(gdf_buurten, gdf_traces)
+    gdf_pockets = dissolve_shapes_using_lasso(gdf_buurten_patch, gdf_traces)
     gdf_pockets.to_file("data/ISIE/pockets_with_archetypes.geojson")
 
     # 5. Merged NL that includes the pockets with other countries and save them as busshapes
