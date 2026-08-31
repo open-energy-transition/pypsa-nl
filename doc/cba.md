@@ -67,6 +67,24 @@ and Open-TYNDP configuration options.
 * `projects`: Defines project identifiers (e.g., `t1-t35`).
 * `cba_scenario_input`: If `use_presolved` is true, the workflow retrieves pre-solved SB networks from an archive.
 
+!!! warning
+
+    We recommend always running the CBA workflow with the latest pre-solved SB networks, which is what the
+    default `cba_scenario_input:sb_version: latest` selects. Earlier versions stay retrievable
+    but may no longer match what a newer workflow expects, and nothing checks for that
+    mismatch. If you encounter errors, please
+    [report them](https://github.com/open-energy-transition/open-tyndp/issues) and fall back to
+    the code of the latest release, which is what the networks were produced with (e.g.
+    pre-solve `0.8` with the `v0.8` tag). For doing so, open a terminal in your open-tyndp folder and run e.g.:
+
+    ```bash
+    git fetch --tags
+    git checkout v0.8
+    ```
+
+    The pre-solved networks also assume the default settings of `config.tyndp.yaml` and `config.hpc.yaml`, 
+    so a deviating config can leave the SB and CBA assumptions out of alignment.
+
 ### Rolling Horizon Settings
 
 * `storage.cyclic_carriers`: Carriers that remain cyclic within each weekly window.
@@ -153,6 +171,18 @@ Similarly, a single climate year can be run by modifying `run.name` in `config/c
 ```console
 $ pixi run tyndp-cba --config run='{"name":"NT-cy2009"}'
 ```
+
+## Evaluation of custom projects
+
+Custom PINT transmission projects can be evaluated with the CBA workflow. Each project is defined in `data/custom_cba_transmission_projects.csv` and selected in the configuration. Two types of custom project are supported, depending on whether `project_id` refers to an existing PINT project:
+
+- **Modified projects**: if the combination (`project_id`, `bus0`, `bus1`) matches an existing PINT project, the specified fields overwrite those of that project. Fields left empty retain their original values.
+
+- **New projects**: if `project_id` is not yet used, the entry is added as a new PINT project, modeled as a link.
+
+Every entry must define `project_id`, `bus0`, `bus1` and at least one capacity (`p_nom 0->1` or `p_nom 1->0`), and the resulting combinations must be unique. Entries referring to TOOT projects are not supported and are ignored with a warning.
+
+Custom projects are injected into the workflow in [`clean_projects`](cba_rules.md#rule-clean_projects-checkpoint), once the project list has been extracted. The set of projects evaluated in the CBA workflow is configured by [`cba.projects`](configuration.md#cba_cf). Transmission capacities are in MW.
 
 ## Checkpoint
 
