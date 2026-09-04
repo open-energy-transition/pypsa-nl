@@ -238,7 +238,8 @@ def adjust_international_connection(
 
 def adjust_tennet_connection(
     n: pypsa.Network,
-    tennet_capacity: dict,
+    tennet_capacity: str,
+    tennet_xlsx: str,
 ) -> pypsa.Network:
     """
     Adjust AC transmission line capacities in the Dutch network based on
@@ -258,8 +259,18 @@ def adjust_tennet_connection(
     pypsa.Network
         The modified network with updated line capacities and undefined connections removed.
     """
+
+    df_cap = pd.read_excel(
+        tennet_xlsx,
+        sheet_name="Transfer capacities",
+        header=[0],
+        index_col=0,
+    ).filter(like="R", axis=0)
+    df_cap.columns = ["circuit", "max", "effective"]
+
     tennet_set_capacity = {
-        frozenset(k.split("-")): v * 1000 for k, v in tennet_capacity.items()
+        frozenset([f"NL{i[1:3]}AC", f"NL{i[5:7]}AC"]): df_cap.loc[i, tennet_capacity]
+        for i in df_cap.index
     }
 
     buses = n.buses.index[n.buses.country == "NL"]
@@ -323,6 +334,86 @@ def readjust_offshore_buses(
     nl.remove("Link", ["relation/14126301-450-DC", H2_pipeline_GB])
 
     return nl
+
+
+def readjust_tennet_load(n, tennet_xlsx, scenario="KM", year=2050):
+
+    to_drop = n.loads[
+        (n.loads["carrier"] == "electricity")
+        & (nl.loads["bus"].map(nl.buses.country) == "NL")
+    ].index
+
+    n.remove("Load", to_drop)
+
+    df_region = pd.read_excel(
+        tennet_xlsx,
+        sheet_name="Regionalisation keys 16 regions",
+        header=[0, 1, 2, 3, 4, 5, 6],
+        index_col=0,
+    )
+
+    df_region = df_region.loc[~df_region.index.duplicated(keep="first")]
+    df_region = df_region[scenario][year]
+    df_region = df_region.loc[:, df_region.columns.get_level_values("TYPE") == "Demand"]
+
+    keep = ["LEVEL", "SECTOR"]
+    drop = [x for x in df_region.columns.names if x not in keep]
+
+    df_region.columns = df_region.columns.droplevel(drop).map("_".join)
+    df_region = df_region.drop("Total").dropna()
+    df_region["bus"] = [str(i).split("_")[0] for i in df_region.index]
+    df_region["bus"] = df_region["bus"].apply(lambda x: f"0{x}" if len(x) == 1 else x)
+    df_region = df_region.set_index("bus")
+
+    df_profile = pd.read_excel(
+        tennet_xlsx,
+        sheet_name="Hourly demand profiles",
+        header=[0, 1, 2, 3],
+        index_col=0,
+    )
+
+    df_profile = df_profile[scenario][year]
+    df_profile.columns = df_profile.columns.map("_".join)
+
+    hours = (n.snapshots - n.snapshots[0]).total_seconds() / 3600 + 1
+    df_profile.index = df_profile.index.map(dict(zip(hours.astype(int), nl.snapshots)))
+    df_profile = df_profile.loc[df_profile.index.dropna()]
+
+    for operator in ["TSO", "DSO"]:
+        df1 = df_region.filter(like=operator).copy()
+        df2 = df_profile.filter(like=operator).copy()
+
+        columns = df1.columns.intersection(df2.columns)
+        columns_missing = df1.columns.difference(df2.columns)
+
+        logger.info(f"Missing columns: {columns_missing}")
+
+        df1 = df1[columns]
+        df2 = df2[columns]
+
+        df_dynamic = -df2 @ df1.T
+        df_dynamic = df_dynamic.loc[:, df_dynamic.sum() > 0]
+
+        voltage = " low voltage" if operator == "DSO" else ""
+        bus = df_dynamic.columns.astype(str)
+        df_static = pd.DataFrame(
+            {
+                "bus": "NL" + bus + "AC" + voltage,
+                "carrier": "electricity",
+            },
+            index="NL" + bus + "AC " + operator,
+        )
+        df_dynamic.columns = "NL" + bus + "AC " + operator
+
+        n.add(
+            "Load",
+            df_static.index,
+            bus=df_static["bus"],
+            carrier=df_static["carrier"],
+            p_set=df_dynamic,
+        )
+
+    return n
 
 
 def readjust_load(
@@ -517,7 +608,10 @@ def readjust_conventionals(
 
 def retrieve_electricity_weighting(n):
     """Extract the weightings of electricity demand"""
-    df_elec = n.loads[n.loads.carrier == "electricity"].copy()
+    df_elec = n.loads[
+        (n.loads.carrier == "electricity")
+        & (n.loads.bus.str.contains("low voltage", na=False))
+    ].copy()
     df_elec.p_set = n.snapshot_weightings.objective @ n.loads_t.p_set[df_elec.index]
     df_elec.index = df_elec.bus.map(n.buses.location)
 
@@ -662,6 +756,8 @@ if __name__ == "__main__":
     configure_logging(snakemake)
     set_scenario_config(snakemake)
 
+    tennet_xlsx = "data/ISIE/260821 - ElSysOp transfer capacities and regionalisation_region 6 and 9 improvedd.xlsx"
+
     n = pypsa.Network(snakemake.input.network)
     nl = pypsa.Network(snakemake.input.network_nl)
 
@@ -669,8 +765,8 @@ if __name__ == "__main__":
     nl = adjust_international_connection(nl, n_ext)
 
     tennet_capacity = snakemake.params.tennet_capacity
-    if tennet_capacity:
-        nl = adjust_tennet_connection(nl, tennet_capacity)
+    if tennet_capacity in ["max", "effective"] and tennet_xlsx:
+        nl = adjust_tennet_connection(nl, tennet_capacity, tennet_xlsx)
 
     nl = keep_country(nl, ["NL"])
     n_int = keep_country(n, ["NL"])
@@ -700,12 +796,11 @@ if __name__ == "__main__":
         "GBAC H2": "GB H2",
         "GBAC": "GB00",
         "NOAC H2": "NO H2",
-        "NOAC": "NOS0"
+        "NOAC": "NOS0",
     }
 
     for c in nl.components[["Link", "Line"]]:
-        for bus in ["bus0","bus1"]:
-
+        for bus in ["bus0", "bus1"]:
             c.static[bus] = c.static[bus].str.replace(
                 "|".join(replacements),
                 lambda m: replacements[m.group()],
@@ -713,7 +808,13 @@ if __name__ == "__main__":
             )
 
     # Adjust and distribute TYNDP components but keep the values consistent
-    nl = readjust_load(nl, n_int, carriers=["electricity"])
+    if tennet_xlsx:
+        nl = readjust_tennet_load(
+            nl, tennet_xlsx, year=int(snakemake.wildcards.planning_horizons)
+        )
+    else:
+        nl = readjust_load(nl, n_int, carriers=["electricity"])
+
     nl = readjust_renewables(nl, n_int, mapping=snakemake.params.res_tyndp_mapping)
     nl = readjust_conventionals(nl, n_int, mapping=snakemake.params.conv_tyndp_mapping)
     nl = readjust_storages(nl, n_int, mapping=snakemake.params.store_tyndp_mapping)
