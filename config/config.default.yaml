@@ -3,7 +3,7 @@
 # yaml-language-server: $schema=./schema.default.json
 
 # docs in https://open-tyndp.readthedocs.io/en/latest/configuration.html#version
-version: v0.8
+version: v0.9
 
 # docs in https://open-tyndp.readthedocs.io/en/latest/configuration.html#tutorial
 tutorial: false
@@ -21,6 +21,7 @@ remote:
   ssh: ""
   path: ""
   sync_file: {}
+  sync_exclude: []
 
 # docs in https://open-tyndp.readthedocs.io/en/latest/configuration.html#run
 run:
@@ -1405,6 +1406,10 @@ solving:
 data:
   version_files:
   - data/versions.csv
+  local_cache:
+    enable: false
+    directory: "data/local-cache"
+    fill: false
   hotmaps_industrial_sites:
     source: archive
     version: latest
@@ -1596,6 +1601,9 @@ data:
     version: latest
   open_tyndp_prelim:
     source: archive
+    version: latest
+  countries_centroids:
+    source: primary
     version: latest
 
 # docs in https://open-tyndp.readthedocs.io/en/latest/configuration.html#overpass_api
