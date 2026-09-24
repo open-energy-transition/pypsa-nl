@@ -5,18 +5,19 @@
 
 import geopandas as gpd
 import pandas as pd
-
-from shapely.geometry import Polygon, MultiPolygon
 from shapely import union_all
+from shapely.geometry import MultiPolygon, Polygon
 
 from scripts._helpers import (
     set_scenario_config,
 )
 
+
 def largest_polygon(geom):
     if isinstance(geom, MultiPolygon):
         return max(geom.geoms, key=lambda g: g.area)
     return geom
+
 
 def fill_gdf_holes(gdf: gpd.GeoDataFrame, gdf_nl: gpd.GeoDataFrame):
 
@@ -33,25 +34,17 @@ def fill_gdf_holes(gdf: gpd.GeoDataFrame, gdf_nl: gpd.GeoDataFrame):
     gdf_holes["orig_area"] = gdf_holes.to_crs(3857).geometry.area
 
     # Prevent overlays with existing shapes (island within shapes)
-    gdf_holes = gpd.overlay(
-        gdf_holes,
-        gdf,
-        how="difference"
-    )
+    gdf_holes = gpd.overlay(gdf_holes, gdf, how="difference")
 
     # Filter out large bodies of water
-    gdf_holes = gpd.overlay(
-        gdf_nl,
-        gdf_holes,
-        how="intersection"
-    )
+    gdf_holes = gpd.overlay(gdf_nl, gdf_holes, how="intersection")
 
     # Retain only the largest polygon
     gdf_holes["geometry"] = gdf_holes.geometry.apply(largest_polygon)
 
     # Drop patches with area loss larger than 99%
     gdf_holes["new_area"] = gdf_holes.to_crs(3857).geometry.area
-    gdf_holes["subtract_ratio"] = gdf_holes["new_area"]/ gdf_holes["orig_area"]
+    gdf_holes["subtract_ratio"] = gdf_holes["new_area"] / gdf_holes["orig_area"]
     gdf_holes = gdf_holes[gdf_holes["subtract_ratio"] > 0.01]
 
     gdf_holes = gdf_holes[["geometry"]].reset_index(drop=True)
@@ -64,7 +57,7 @@ def fill_gdf_holes(gdf: gpd.GeoDataFrame, gdf_nl: gpd.GeoDataFrame):
     gdf_holes["archetype"] = 0
     gdf_holes = gdf_holes.set_index("statcode")
 
-    gdf_updated = pd.concat([gdf,gdf_holes])
+    gdf_updated = pd.concat([gdf, gdf_holes])
 
     return gdf_updated
 
@@ -80,11 +73,7 @@ def dissolve_shapes_using_lasso(gdf: gpd.GeoDataFrame, gdf_lasso: gpd.GeoDataFra
     gdf_proj["orig_area"] = gdf_proj.geometry.area
 
     # Compute intersections
-    intersection = gpd.overlay(
-        gdf_lasso_proj,
-        gdf_proj,
-        how="intersection"
-    )
+    intersection = gpd.overlay(gdf_lasso_proj, gdf_proj, how="intersection")
 
     # Calculate overlap ratio relative to the original polygon
     intersection["overlap_ratio"] = (
@@ -97,7 +86,6 @@ def dissolve_shapes_using_lasso(gdf: gpd.GeoDataFrame, gdf_lasso: gpd.GeoDataFra
     for idx, row in matches.iterrows():
         gdf_idx = row["BU_code"]
         gdf.loc[gdf_idx, "pockets"] = row["name"]
-
 
     # Count archetype frequencies per pocket
     archetype_counts = (
@@ -129,7 +117,9 @@ if __name__ == "__main__":
     set_scenario_config(snakemake)
 
     # 1. Retrieve relevant GeoDataFrames
-    gdf_buurten = gpd.read_file(snakemake.input.archetypen_buurten).set_index("statcode")
+    gdf_buurten = gpd.read_file(snakemake.input.archetypen_buurten).set_index(
+        "statcode"
+    )
     gdf = gpd.read_file(snakemake.input.admin_shapes)
     gdf_traces = gpd.read_file(snakemake.input.pockets_traces)
 
@@ -138,7 +128,7 @@ if __name__ == "__main__":
     gdf_nl = gdf[gdf["country"] == "NL"]
     gdf_wo_nl = gdf[gdf["country"] != "NL"]
 
-    # 3. Fill the gaps in the Buurten gdf but stick only to NL land shapes 
+    # 3. Fill the gaps in the Buurten gdf but stick only to NL land shapes
     gdf_buurten_patch = fill_gdf_holes(gdf_buurten, gdf_nl)
 
     # 4. Dissolve the Buurten using the pocket traces, save them for other uses
@@ -146,7 +136,9 @@ if __name__ == "__main__":
     gdf_pockets.to_file("data/ISIE/pockets_with_archetypes.geojson")
 
     # 5. Merged NL that includes the pockets with other countries and save them as busshapes
-    gdf_nl_pockets = gdf_pockets[["geometry"]].reset_index().rename(columns={"pockets": "name"})
+    gdf_nl_pockets = (
+        gdf_pockets[["geometry"]].reset_index().rename(columns={"pockets": "name"})
+    )
     gdf_nl_pockets["country"] = "NL"
 
     gdf_new = pd.concat([gdf_wo_nl, gdf_nl_pockets]).reset_index(drop=True)

@@ -4,7 +4,7 @@
 #
 # SPDX-License-Identifier: CC0-1.0
 
-# snakemake resources/nl-core/networks/base_s_21_elec.nc --configfile config/config.nl-core.yaml -call
+# snakemake resources/nl-core/networks/base_s_22_elec.nc --configfile config/ISIE/config.nl-core.yaml -call
 
 run:
   name: "nl-core"
@@ -13,7 +13,7 @@ foresight: myopic
 
 scenario:
   clusters:
-  - 20
+  - 22
   planning_horizons:
   - 2050
 
@@ -138,6 +138,10 @@ clustering:
   mode: custom_busshapes
   # temporal:
   #   resolution_sector: 6H # Adjust to suit the main function
+  simplify_network:
+    to_substations: false
+    remove_stubs: false
+    remove_stubs_across_borders: false
 
 final_adjustment: false
 
