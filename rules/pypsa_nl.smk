@@ -75,6 +75,7 @@ rule final_adjustment_myopic:
         conv_tyndp_mapping=config_provider("conv_tyndp_mapping"),
         store_tyndp_mapping=config_provider("store_tyndp_mapping"),
         tennet_capacity=config_provider("tennet_capacity"),
+        battery_system=config_provider("battery_system"),
     message:
         "Combine two networks"
     script:

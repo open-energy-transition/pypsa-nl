@@ -3,9 +3,16 @@
 #
 # SPDX-License-Identifier: MIT
 
-tennet_capacity: effective
+tennet_capacity: 
+  type: winter effective
+  s_nom_extendable: false
+  s_nom_max: 1.0
 
 offshore_buses: true
+
+battery_system: 
+  power_cap: 27000
+  max_load: 8
 
 res_tyndp_mapping:
   offwind-ac-fb-r: offwind-ac
@@ -45,6 +52,9 @@ conv_tyndp_mapping:
   oil-shale-new: oil
   h2-ccgt: CCGT
 
+  H2 Electrolysis: H2 Electrolysis
+  SMR CC: SMR CC
+
 store_tyndp_mapping:
-  battery: battery
+  # battery: battery
   H2 cavern-storage: H2 Store
