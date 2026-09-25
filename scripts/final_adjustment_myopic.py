@@ -302,8 +302,6 @@ def adjust_tennet_connection(
     n.lines.loc[df.index, "s_nom_extendable"] = tennet_capacity["s_nom_extendable"]
     n.lines.loc[df.index, "s_nom_max"] = n.lines.loc[df.index, "s_nom"] * tennet_capacity["s_nom_max"]
 
-    breakpoint()
-
     if tennet_capacity["s_nom_extendable"]:
         log_info = f"extendable by a factor of {tennet_capacity["s_nom_max"]}"
     else:
