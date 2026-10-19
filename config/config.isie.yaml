@@ -9,7 +9,7 @@
 # pixi shell -e open-tyndp
 
 run:
-  name: "tyndp-isie-update"
+  name: "tyndp-isie-2050"
   scenarios:
     enable: false
     file: config/scenarios.tyndp.yaml
@@ -18,7 +18,7 @@ scenario:
   clusters:
   - all
   planning_horizons:
-  # - 2040
+  #- 2040
   - 2050  # single run myopic
 
 # TODO set foresight
@@ -39,13 +39,18 @@ solving:
     name: gurobi
     options: gurobi-default
 
-tennet_capacity: 
-  type: winter effective
-  s_nom_extendable: false
-  s_nom_max: 1.0
+tennet_adjustment:
+  tennet_xlsx: "data/ISIE/260821 - ElSysOp transfer capacities and regionalisation_transmission_2040.xlsx"
+  tennet_capacity:
+    enable: true
+    type: winter effective
+    s_nom_extendable: false
+    s_nom_max: 1.0
+  load: true
+  battery_system:
+    enable: true
+    power_cap: 27000
+    max_load: 8
+  renewables: true
 
 offshore_buses: true
-
-battery_system: 
-  power_cap: 27000
-  max_load: 8

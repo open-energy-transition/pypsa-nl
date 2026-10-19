@@ -70,12 +70,12 @@ rule final_adjustment_myopic:
             "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_brownfield_adjusted.nc"
         ),
     params:
+        tennet_adjustment=config_provider("tennet_adjustment"),
         offshore_buses=config_provider("offshore_buses"),
+        res_tennet_mapping=config_provider("res_tennet_mapping"),
         res_tyndp_mapping=config_provider("res_tyndp_mapping"),
         conv_tyndp_mapping=config_provider("conv_tyndp_mapping"),
         store_tyndp_mapping=config_provider("store_tyndp_mapping"),
-        tennet_capacity=config_provider("tennet_capacity"),
-        battery_system=config_provider("battery_system"),
     message:
         "Combine two networks"
     script:

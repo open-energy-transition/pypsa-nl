@@ -3,16 +3,29 @@
 #
 # SPDX-License-Identifier: MIT
 
-tennet_capacity: 
-  type: winter effective
-  s_nom_extendable: false
-  s_nom_max: 1.0
+tennet_adjustment:
+  tennet_xlsx: "data/ISIE/260821 - ElSysOp transfer capacities and regionalisation_transmission_2040.xlsx"
+  tennet_capacity:
+    enable: true
+    type: winter effective
+    s_nom_extendable: false
+    s_nom_max: 1.0
+  load: true
+  battery_system:
+    enable: true
+    power_cap: 27000
+    max_load: 8
+  renewables: true
 
 offshore_buses: true
 
-battery_system: 
-  power_cap: 27000
-  max_load: 8
+res_tennet_mapping:
+  offwind-ac-fb-r: Wind_offshore
+  hydro-ror: Hydro_RoR
+  onwind: Wind_onshore
+  solar-pv-utility: Solar_PV_field
+  solar-pv-rooftop: Solar_PV_households
+  offwind-dc-fb-r: Wind_offshore
 
 res_tyndp_mapping:
   offwind-ac-fb-r: offwind-ac
@@ -20,7 +33,7 @@ res_tyndp_mapping:
   onwind: onwind
   solar-pv-utility: solar
   solar-pv-rooftop: solar rooftop
-  # dsr: False
+  # dsr: false
   offwind-dc-fb-r: offwind-dc
   # offwind-h2-fb-oh: false
   # offwind-dc-fb-oh: offwind-dc
@@ -29,12 +42,12 @@ conv_tyndp_mapping:
   nuclear: nuclear
   gas-conv-old1: OCGT
   gas-conv-old2: OCGT
-  gas-ccgt-old1: CCGT
-  gas-ccgt-old2: CCGT
-  gas-ccgt-new: CCGT
-  gas-ccgt-ccs: CCGT
-  gas-ccgt-present1: CCGT
-  gas-ccgt-present2: CCGT
+  gas-ccgt-old1: electricity # distribute by electricity demand (Original: CCGT)
+  gas-ccgt-old2: electricity # distribute by electricity demand (Original: CCGT)
+  gas-ccgt-new: electricity # distribute by electricity demand (Original: CCGT)
+  gas-ccgt-ccs: electricity # distribute by electricity demand (Original: CCGT)
+  gas-ccgt-present1: electricity # distribute by electricity demand (Original: CCGT)
+  gas-ccgt-present2: electricity # distribute by electricity demand (Original: CCGT)
   gas-ocgt-old: OCGT
   gas-ocgt-new: OCGT
   coal-old1: coal
@@ -50,11 +63,18 @@ conv_tyndp_mapping:
   oil-heavy-old2: oil
   oil-shale-old: oil
   oil-shale-new: oil
-  h2-ccgt: CCGT
-
+  other-non-res-gas-ccgt-old1: electricity # distribute by electricity demand (Original: CCGT)
+  other-res-biomass: electricity # distribute by electricity demand (Original: CCGT)
+  h2-ccgt: electricity # distribute by electricity demand (Original: CCGT)
   H2 Electrolysis: H2 Electrolysis
   SMR CC: SMR CC
 
+  # Workaround to drop carriers:
+  CCGT: CCGT
+  SMR: SMR
+  H2 Fuel Cell: H2 Fuel Cell
+  H2 turbine: H2 turbine
+
 store_tyndp_mapping:
-  # battery: battery
+  battery: battery
   H2 cavern-storage: H2 Store

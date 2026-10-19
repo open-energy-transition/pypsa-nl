@@ -7,6 +7,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pypsa
+from pathlib import Path
 
 from scripts._helpers import (
     configure_logging,
@@ -15,8 +16,6 @@ from scripts._helpers import (
 
 WEIGHTING_COLS = [
     "p_init",
-    "p_max_pu",
-    "p_min_pu",
     "p_nom",
     "p_nom_max",
     "p_nom_min",
@@ -25,8 +24,6 @@ WEIGHTING_COLS = [
     "p_nom_set",
     "p_set",
     "e_initial",
-    "e_max_pu",
-    "e_min_pu",
     "e_nom",
     "e_nom_max",
     "e_nom_min",
@@ -35,6 +32,14 @@ WEIGHTING_COLS = [
     "e_nom_set",
     "e_set",
 ]
+
+def disable_config(d):
+    return {
+        k: disable_config(v) if isinstance(v, dict)
+        else False if v is True
+        else v
+        for k, v in d.items()
+    }
 
 
 def keep_country(
@@ -232,6 +237,7 @@ def adjust_international_connection(
 
         line_idx = df[(df.comp == "Line") & (df.country == country)].index
         n_spatial.lines.loc[line_idx, ["s_nom", "s_nom_max"]] *= w
+        n_spatial.lines.loc[line_idx,"s_max_pu"] = 1.0
 
     return n_spatial
 
@@ -301,6 +307,7 @@ def adjust_tennet_connection(
 
     n.lines.loc[df.index, "s_nom_extendable"] = tennet_capacity["s_nom_extendable"]
     n.lines.loc[df.index, "s_nom_max"] = n.lines.loc[df.index, "s_nom"] * tennet_capacity["s_nom_max"]
+    n.lines.loc[df.index, "s_max_pu"] = 1.0
 
     if tennet_capacity["s_nom_extendable"]:
         log_info = f"extendable by a factor of {tennet_capacity["s_nom_max"]}"
@@ -334,35 +341,100 @@ def readjust_offshore_buses(
     pypsa.Network
         The modified spatial network.
     """
+
+    # Connect Great Britain H2 pipeline with Rotterdam
     H2_pipeline_GB = nl.links.loc[
         (nl.links.bus0 == "GBAC H2") & (nl.links.bus1 == "NL10AC H2")
     ].index[0]
-
-    n.links.loc["NLOH001-NL00-Offshore DC", "bus1"] = nl.links.loc[
-        "relation/14126301-450-DC", "bus1"
-    ]
     n.links.loc["Offshore H2 pipeline NLOH001 H2 -> NL H2", "bus1"] = nl.links.loc[
         H2_pipeline_GB, "bus1"
     ]
+    # Connect offshore DC lines of the Netherlands
+    n.links.loc["NLOH001-NL00-Offshore DC", "bus1"] = nl.links.loc[
+        "relation/14126301-450-DC", "bus1"
+    ]
+    # Remove duplicate links
     nl.remove("Link", ["relation/14126301-450-DC", H2_pipeline_GB])
 
-    return nl
+    # Set import destionation for Ammonia to Rotterdam (NL10AC H2) and Vlissingen (NL15AC H2)
+    H2_import = ["H2 import Ammonia -> NL - low","H2 import Ammonia -> NL - high"]
+    H2_import_bus = ["NL10AC H2", "NL15AC H2"]
+    df_import = n.links.loc[np.tile(H2_import,len(H2_import_bus))].copy()
+    df_import["bus1"] = pd.Series(H2_import_bus).repeat(len(H2_import)).values
+    df_import.index = [
+        idx.replace("NL", bus1) 
+        for idx, bus1 in zip(df_import.index, df_import["bus1"].str.replace(" H2", ""))
+    ]
+    # Remove the single import link and replace them with two links.
+    n.remove("Link", H2_import)
+    n.add("Link", df_import.index, **df_import)
 
-def process_region_id(df):
-
-    keep = ["LEVEL", "SECTOR"]
-    drop = [x for x in df.columns.names if x not in keep]
-
-    df.columns = df.columns.droplevel(drop).map("_".join)
-    df = df.drop("Total").dropna()
-    df["bus"] = [str(i).split("_")[0] for i in df.index]
-    df["bus"] = df["bus"].apply(lambda x: f"0{x}" if len(x) == 1 else x)
-    df = df.set_index("bus")
-
-    return df
+    return n, nl
 
 
-def readjust_tennet_load(n, tennet_xlsx, scenario="KM", year=2050):
+def extract_regionalization(
+    tennet_xlsx: str, 
+    scenario: str="KM",
+    year: int=2050,
+    filter: dict={"CARRIER":["Electricity"]},
+    merge_level: bool=False
+):
+
+    df_region = pd.read_excel(
+        tennet_xlsx, 
+        sheet_name="Regionalisation keys 16 regions",
+        header=[0,1,2,3,4,5,6],
+        index_col=0
+    )
+
+    df_region = df_region.loc[~df_region.index.duplicated(keep='first')]
+    df_region = df_region[scenario][year]
+
+    for key, values in filter.items():
+        df_region = df_region.loc[:,df_region.columns.get_level_values(key).isin(values)]
+
+    keep = ["CARRIER", "LEVEL", "TYPE", "SECTOR"]
+    drop = [x for x in df_region.columns.names if x not in keep]
+
+    df_region.columns = df_region.columns.droplevel(drop)
+    df_region = df_region.drop("Total").dropna()
+    df_region["bus"] = [str(i).split("_")[0] for i in df_region.index]
+    df_region["bus"] = df_region["bus"].apply(lambda x: f'0{x}' if len(x) == 1 else x)
+    df_region = df_region.set_index("bus")
+
+    if not merge_level:
+        keep = ["LEVEL", "SECTOR"]
+        drop = [x for x in df_region.columns.names if x not in keep]
+
+        df_region.columns = df_region.columns.droplevel(drop).map('_'.join)
+        return df_region
+
+    df_split = pd.read_excel(
+        tennet_xlsx,
+        sheet_name="TSO_DSO_split",
+        header=[0],
+        index_col=[0,1,2],
+    )
+    s_split = df_split[f"{scenario}_{year}"]
+
+    factors = df_region.columns.map(
+        lambda c: (1 - s_split[c[0]][c[2]][c[3]])
+        if c[1] == "DSO"
+        else s_split[c[0]][c[2]][c[3]]
+    )
+
+    df_region_adj = df_region.mul(factors, axis="columns")
+    df_region_adj = df_region_adj.T.groupby("SECTOR").sum().T
+
+    return df_region_adj
+
+
+def readjust_tennet_load(
+    n: pypsa.Network, 
+    tennet_xlsx: str, 
+    scenario: str="KM", 
+    year: int=2050
+):
 
     to_drop = n.loads[
         (n.loads["carrier"] == "electricity")
@@ -371,17 +443,13 @@ def readjust_tennet_load(n, tennet_xlsx, scenario="KM", year=2050):
 
     n.remove("Load", to_drop)
 
-    df_region = pd.read_excel(
-        tennet_xlsx,
-        sheet_name="Regionalisation keys 16 regions",
-        header=[0, 1, 2, 3, 4, 5, 6],
-        index_col=0,
+    df_region = extract_regionalization(
+        tennet_xlsx, 
+        scenario=scenario,
+        year=year,
+        filter={"CARRIER":["Electricity"], "TYPE": ["Demand"]},
+        merge_level=False
     )
-
-    df_region = df_region.loc[~df_region.index.duplicated(keep="first")]
-    df_region = df_region[scenario][year]
-    df_region = df_region.loc[:, df_region.columns.get_level_values("TYPE") == "Demand"]
-    df_region = process_region_id(df_region)
 
     df_profile = pd.read_excel(
         tennet_xlsx,
@@ -473,6 +541,67 @@ def readjust_load(
 
     return n_spatial
 
+
+def readjust_tennet_renewables(
+    n_spatial: pypsa.Network,
+    n_values: pypsa.Network,
+    tennet_xlsx: str,
+    mapping_tyndp: dict[str, str],
+    mapping_tennet: dict[str, str],
+    scenario: str="KM", 
+    year: int=2050,
+):
+    
+    df_region = extract_regionalization(
+        tennet_xlsx, 
+        scenario=scenario,
+        year=year,
+        filter={"TYPE":["Supply"]},
+        merge_level=True
+    )
+
+    m = n_spatial.copy()
+
+    # drop all original generators
+    carrier_drop = [c for c in mapping_tyndp.values() if c]
+    index_drop = m.generators[m.generators.carrier.isin(carrier_drop)].index
+
+    m.remove("Generator", index_drop)
+
+    for tyndp_c, tennet_c in mapping_tennet.items():
+        df_values = n_values.generators[n_values.generators.carrier == tyndp_c]
+        df_values_p = n_values.generators_t.p_max_pu[df_values.index]
+
+        factor = df_region[tennet_c]
+
+        # --- expansion ---
+        len_values = len(df_values)
+        len_spatial = len(factor)
+
+        df = df_values.loc[df_values.index.repeat(len_spatial)].copy()
+
+        df["weight"] = np.tile(factor, len_values)
+        num_cols = df.columns.intersection(WEIGHTING_COLS)
+        df[num_cols] = df[num_cols].mul(df["weight"], axis=0)
+        df["bus"] = [f"NL{i}AC" for i in factor.index]
+        df.index = [f"NL{i}AC 0 {tyndp_c}-{year}" for i in factor.index]
+
+        # Set the p_max_pu the same throughout the region.
+        df_spatial_p = df_values_p[df_values.index.repeat(len_spatial)].copy()
+        df_spatial_p.columns = [f"NL{i}AC 0 {tyndp_c}-{year}" for i in factor.index]
+
+        # Filter generators with 0 p_nom
+        df = df[df["p_nom"] > 0]
+        p_max_pu = df_spatial_p[df.index]
+
+        m.add("Generator", df.index, **df)
+        m.generators_t.p_max_pu[df.index] = p_max_pu
+
+    logger.info("Readjust renewables:\n" \
+    "- Total renewables capacity in NL to be the same as Open-TYNDP,\n" \
+    "- Distributed using TenneT's factor.")
+
+    return m
 
 def readjust_renewables(
     n_spatial: pypsa.Network,
@@ -584,7 +713,6 @@ def readjust_conventionals(
     """
 
     m = n_spatial.copy()
-
     # drop all original links
     carrier_drop = [c for c in mapping.values() if c]
     index_drop = m.links[m.links.carrier.isin(carrier_drop)].index
@@ -595,9 +723,16 @@ def readjust_conventionals(
     for tyndp_c, pypsa_c in mapping.items():
         df_values = n_values.links[n_values.links.carrier == tyndp_c]
 
-        df_spatial = n_spatial.links[n_spatial.links.carrier == pypsa_c][
-            ["bus1", "p_nom"]
-        ].copy()
+        if pypsa_c == "electricity":
+            # use electricity weightings
+            year = df_values["build_year"].max()
+            bus_index = n_spatial.buses[n_spatial.buses.carrier == "AC"].index
+            name_index = [f"{bus} {pypsa_c}-{year}" for bus in bus_index]
+            df_spatial = pd.DataFrame({"bus1":bus_index, "p_nom":0.0}, index=name_index)
+        else:
+            df_spatial = n_spatial.links[n_spatial.links.carrier == pypsa_c][
+                ["bus1", "p_nom"]
+            ].copy()
 
         if df_values.empty or df_spatial.empty:
             continue
@@ -606,12 +741,10 @@ def readjust_conventionals(
         weight = df_spatial["p_nom"].replace(np.inf, 0)
 
         if weight.sum() == 0:
-            log_map += f"- {tyndp_c}: electricity\n"
-
             weightings = retrieve_electricity_weighting(n_spatial)
             weight = df_spatial.bus1.map(n_spatial.buses.location).map(weightings)
-        else:
-            log_map += f"- {tyndp_c}: {pypsa_c}\n"
+        
+        log_map += f"- {tyndp_c}: {pypsa_c}\n"
 
         df_spatial["weight"] = weight / weight.sum()
 
@@ -623,12 +756,26 @@ def readjust_conventionals(
         len_spatial = len(df_spatial)
 
         df = df_values.loc[df_values.index.repeat(len_spatial)].copy()
+        df_spatial = df_spatial.loc[np.tile(df_spatial.index, len_values)].copy()
 
         # assign new index (pypsa index repeated per tyndp row)
-        df.index = np.tile(df_spatial.index, len_values)
+        if len_values > 1:
+            for v in range(len_values):
+                s_tyndp_sub = df_values.iloc[v]
+                name = s_tyndp_sub.name
+                name = name.replace(f"{s_tyndp_sub.bus1}-","").replace(f"{s_tyndp_sub.build_year}-","")
+                range_index = [s + len_spatial * v for s in range(len_spatial)]
+
+                new_index = df_spatial.index.to_numpy(copy=True)
+                new_index[range_index] = [
+                    x.replace(tyndp_c, name) for x in new_index[range_index]
+                ]
+                df_spatial.index = new_index
+
+        df.index = df_spatial.index
 
         # attach weights (correct alignment!)
-        df["weight"] = np.tile(df_spatial["weight"].values, len_values)
+        df["weight"] = df_spatial["weight"]
         num_cols = df.columns.intersection(WEIGHTING_COLS)
         df[num_cols] = df[num_cols].mul(df["weight"], axis=0)
         df = df.drop(columns="weight")
@@ -658,32 +805,15 @@ def readjust_tennet_storages(
     year=2050
 ):
 
-    df_region = pd.read_excel(
-        tennet_xlsx,
-        sheet_name="Regionalisation keys 16 regions",
-        header=[0, 1, 2, 3, 4, 5, 6],
-        index_col=0,
-    )
+    factor = extract_regionalization(
+        tennet_xlsx, 
+        scenario=scenario,
+        year=year,
+        filter={"SECTOR":["Battery_system"]},
+        merge_level=True
+    )["Battery_system"]
 
-    df_region = df_region.loc[~df_region.index.duplicated(keep="first")]
-    df_region = df_region[scenario][year]
-    df_region = df_region.loc[:, df_region.columns.get_level_values("ID").str.contains("Battery")]
-    df_region = process_region_id(df_region)
-
-    df_split = pd.read_excel(
-        tennet_xlsx,
-        sheet_name="TSO_DSO_split",
-        header=[0],
-        index_col=2,
-    )
-
-    tso_dso_split = df_split.loc["Battery_system"][f"{scenario}_{year}"]
-    factor = (
-        df_region["TSO_Battery_system"] * tso_dso_split 
-        + df_region["DSO_Battery_system"] * (1-tso_dso_split)
-    )
-
-    index = df_region.index
+    index = factor.index
     df_sys = pd.DataFrame({
         "factor":factor,
         "store_name": [f"NL{i}AC battery-{year}" for i in index],
@@ -712,14 +842,12 @@ def readjust_tennet_storages(
 
 def retrieve_electricity_weighting(n):
     """Extract the weightings of electricity demand"""
-    df_elec = n.loads[
-        (n.loads.carrier == "electricity")
-        & (n.loads.bus.str.contains("low voltage", na=False))
-    ].copy()
+    df_elec = n.loads[(n.loads.carrier == "electricity")].copy()
     df_elec.p_set = n.snapshot_weightings.objective @ n.loads_t.p_set[df_elec.index]
     df_elec.index = df_elec.bus.map(n.buses.location)
+    df_elec = df_elec.groupby(df_elec.index)["p_set"].sum()
 
-    return df_elec.p_set / df_elec.p_set.sum()
+    return df_elec / df_elec.sum()
 
 
 def readjust_storages(
@@ -909,7 +1037,13 @@ if __name__ == "__main__":
     configure_logging(snakemake)
     set_scenario_config(snakemake)
 
-    tennet_xlsx = "data/ISIE/260821 - ElSysOp transfer capacities and regionalisation_transmission_2040.xlsx"
+    tennet_adjustment = snakemake.params.tennet_adjustment
+    tennet_xlsx = tennet_adjustment["tennet_xlsx"]
+    if tennet_xlsx and Path(tennet_xlsx).exists():
+        logger.info(f"Retrieving TenneT's data from {tennet_xlsx}")
+    else:
+        tennet_adjustment = disable_config(tennet_adjustment)
+        logger.info(f"No TenneT's data available, disabling related config.")
 
     n = pypsa.Network(snakemake.input.network)
     nl = pypsa.Network(snakemake.input.network_nl)
@@ -917,8 +1051,8 @@ if __name__ == "__main__":
     n_ext = keep_country(n, ["NL"], include_neighbours=True)
     nl = adjust_international_connection(nl, n_ext)
 
-    tennet_capacity = snakemake.params.tennet_capacity
-    if tennet_xlsx:
+    tennet_capacity = tennet_adjustment["tennet_capacity"]
+    if tennet_capacity["enable"]:
         nl = adjust_tennet_connection(nl, tennet_capacity, tennet_xlsx)
 
     nl = keep_country(nl, ["NL"])
@@ -931,10 +1065,12 @@ if __name__ == "__main__":
             "NLOH001 H2",
             "NLOH001-NL00-Offshore DC",
             "Offshore H2 pipeline NLOH001 H2 -> NL H2",
+            "H2 import Ammonia -> NL - low",
+            "H2 import Ammonia -> NL - high",
         ]
 
         n = drop_country(n, ["NL"], keep=keep)
-        nl = readjust_offshore_buses(n, nl)
+        n, nl = readjust_offshore_buses(n, nl)
     else:
         n = drop_country(n, ["NL"])
 
@@ -961,23 +1097,42 @@ if __name__ == "__main__":
             )
 
     # Adjust and distribute TYNDP components but keep the values consistent
-    if tennet_xlsx:
-        year = int(snakemake.wildcards.planning_horizons)
+    year = int(snakemake.wildcards.planning_horizons)
+    store_tyndp_mapping = snakemake.params.store_tyndp_mapping
+    res_tyndp_mapping = snakemake.params.res_tyndp_mapping
+    res_tennet_mapping = snakemake.params.res_tennet_mapping
+
+    if tennet_adjustment["load"]:
         nl = readjust_tennet_load(
             nl, tennet_xlsx, year=year
-        )
-        nl = readjust_tennet_storages(
-            nl, 
-            tennet_xlsx, 
-            battery_system=snakemake.params.battery_system,
-            year=year
         )
     else:
         nl = readjust_load(nl, n_int, carriers=["electricity"])
 
-    nl = readjust_renewables(nl, n_int, mapping=snakemake.params.res_tyndp_mapping)
+    battery_system = tennet_adjustment["battery_system"]
+    if battery_system["enable"]:
+        nl = readjust_tennet_storages(
+            nl, 
+            tennet_xlsx, 
+            battery_system=battery_system,
+            year=year
+        )
+        store_tyndp_mapping.pop('battery', None)
+
+    if tennet_adjustment["renewables"]:
+        nl = readjust_tennet_renewables(
+            nl,
+            n_int,
+            tennet_xlsx,
+            mapping_tyndp=res_tyndp_mapping,
+            mapping_tennet=res_tennet_mapping,
+            year=year
+        )
+    else:
+        nl = readjust_renewables(nl, n_int, mapping=res_tyndp_mapping)
+    
     nl = readjust_conventionals(nl, n_int, mapping=snakemake.params.conv_tyndp_mapping)
-    nl = readjust_storages(nl, n_int, mapping=snakemake.params.store_tyndp_mapping)
+    nl = readjust_storages(nl, n_int, mapping=store_tyndp_mapping)
     nl = attach_h2_exogenous_demand(nl, n_int)
 
     # Drop NL carrier components to prevent merging collition
