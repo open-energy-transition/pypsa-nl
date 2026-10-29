@@ -8,16 +8,40 @@ tennet_adjustment:
   tennet_capacity:
     enable: true
     type: winter effective
-    s_nom_extendable: false
-    s_nom_max: 1.0
+    extendable: false
+    method: circuit # "circuit" , "s_max_pu" or "s_nom_max"
+    max_circuit: 6
+    s_nom_max: 8000
+    s_max_pu: 1.1
   load: true
   battery_system:
     enable: true
     power_cap: 27000
     max_load: 8
-  renewables: true
+  renewables:
+    extendable:
+      # onwind: 15100.0
+      solar-pv-utility: 40706.345
+      solar-pv-rooftop: 85433.072
+      offwind-ac-fb-r: false
+      offwind-dc-fb-r: false
+      offwind-dc-fb-oh: false
+      offwind-h2-fb-oh: false
+    by_tennet: false
 
 offshore_buses: true
+
+solving:
+  options:
+    load_shedding:
+      enable: true
+      all_carriers: false
+      carriers:
+        H2: 3000
+        AC: 3000
+  solver:  # Use commercial solver for high resolution results in SB
+    name: gurobi
+    options: gurobi-default
 
 res_tennet_mapping:
   offwind-ac-fb-r: Wind_offshore
