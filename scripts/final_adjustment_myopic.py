@@ -33,6 +33,48 @@ WEIGHTING_COLS = [
     "e_set",
 ]
 
+TYNDP_TECH = [
+    "nuclear",
+    "gas-conv-old1",
+    "gas-conv-old2",
+    "gas-ccgt-old1",
+    "gas-ccgt-old2",
+    "gas-ccgt-new",
+    "gas-ccgt-ccs",
+    "gas-ccgt-present1",
+    "gas-ccgt-present2",
+    "gas-ocgt-old",
+    "gas-ocgt-new",
+    "coal-old1",
+    "coal-old2",
+    "coal-new",
+    "coal-ccs",
+    "lignite-old1",
+    "lignite-old2",
+    "lignite-new",
+    "lignite-ccs",
+    "oil-light",
+    "oil-heavy-old1",
+    "oil-heavy-old2",
+    "oil-shale-old",
+    "oil-shale-new",
+    "h2-ccgt",
+    "other-non-res-gas-ccgt-old1",
+    "other-res-biomass",
+    "H2 Electrolysis",
+    "SMR CC",
+]
+
+PYPSA_TECH = [
+    "OCGT",
+    "CCGT",
+    "H2 Electrolysis",
+    "SMR CC",
+    "SMR",
+    "H2 Fuel Cell",
+    "H2 turbine",
+]
+
 
 def disable_config(d):
     return {
@@ -793,10 +835,9 @@ def readjust_renewables(
     return m
 
 
-def readjust_conventionals(
+def distribute_conventionals(
     n_spatial: pypsa.Network,
     n_values: pypsa.Network,
-    mapping: dict[str, str],
 ) -> pypsa.Network:
     """
     Redistribute aggregated conventional links from `n_values` across the spatial layout of `n_spatial`.
@@ -818,51 +859,29 @@ def readjust_conventionals(
 
     m = n_spatial.copy()
     # drop all original links
-    carrier_drop = [c for c in mapping.values() if c]
+    carrier_drop = [c for c in PYPSA_TECH if c]
     index_drop = m.links[m.links.carrier.isin(carrier_drop)].index
 
     m.remove("Link", index_drop)
-    log_map = ""
 
-    for tyndp_c, pypsa_c in mapping.items():
-        df_values = n_values.links[n_values.links.carrier == tyndp_c]
+    df_all = pd.DataFrame()
 
-        if pypsa_c == "electricity":
-            # use electricity weightings
-            year = df_values["build_year"].max()
-            bus_index = n_spatial.buses[n_spatial.buses.carrier == "AC"].index
-            name_index = [f"{bus} {pypsa_c}-{year}" for bus in bus_index]
-            df_spatial = pd.DataFrame(
-                {"bus1": bus_index, "p_nom": 0.0}, index=name_index
-            )
-        else:
-            df_spatial = n_spatial.links[n_spatial.links.carrier == pypsa_c][
-                ["bus1", "p_nom"]
-            ].copy()
-
-        if df_values.empty or df_spatial.empty:
+    for carrier in TYNDP_TECH:
+        df_values = n_values.links[n_values.links.carrier == carrier]
+        if df_values.empty:
             continue
 
-        # compute weights
-        weight = df_spatial["p_nom"].replace(np.inf, 0)
+        year = df_values["build_year"].max()
 
-        if weight.sum() == 0:
-            weightings = retrieve_electricity_weighting(n_spatial)
-            weight = df_spatial.bus1.map(n_spatial.buses.location).map(weightings)
+        bus_index = n_spatial.buses[n_spatial.buses.carrier == "AC"].index
+        name_index = [f"{bus} {carrier}-{year}" for bus in bus_index]
+        df_spatial = pd.DataFrame({"bus": bus_index, "p_nom": 0.0}, index=name_index)
 
-        log_map += f"- {tyndp_c}: {pypsa_c}\n"
-
-        df_spatial["weight"] = weight / weight.sum()
-
-        # align index naming
-        df_spatial.index = df_spatial.index.str.replace(pypsa_c, tyndp_c, regex=False)
-
-        # --- expansion ---
         len_values = len(df_values)
-        len_spatial = len(df_spatial)
+        len_spatial = len(name_index)
 
         df = df_values.loc[df_values.index.repeat(len_spatial)].copy()
-        df_spatial = df_spatial.loc[np.tile(df_spatial.index, len_values)].copy()
+        df_spatial = df_spatial.loc[np.tile(name_index, len_values)].copy()
 
         # assign new index (pypsa index repeated per tyndp row)
         if len_values > 1:
@@ -876,32 +895,35 @@ def readjust_conventionals(
 
                 new_index = df_spatial.index.to_numpy(copy=True)
                 new_index[range_index] = [
-                    x.replace(tyndp_c, name) for x in new_index[range_index]
+                    x.replace(carrier, name) for x in new_index[range_index]
                 ]
                 df_spatial.index = new_index
 
+        # use p_nom_group to distribute capacity of TYNDP technologies
+        df["p_nom_group"] = df["p_nom"]
+        df["p_nom"] = 0
+        df["p_nom_min"] = 0
+        df["p_nom_extendable"] = True
+
         df.index = df_spatial.index
 
-        # attach weights (correct alignment!)
-        df["weight"] = df_spatial["weight"]
-        num_cols = df.columns.intersection(WEIGHTING_COLS)
-        df[num_cols] = df[num_cols].mul(df["weight"], axis=0)
-        df = df.drop(columns="weight")
+        if carrier == "h2-ccgt":
+            df["bus0"] = df_spatial["bus"] + " H2"
+            df["bus1"] = df_spatial["bus"]
+        elif carrier == "H2 Electrolysis":
+            df["bus0"] = df_spatial["bus"]
+            df["bus1"] = df_spatial["bus"] + " H2"
+        else:
+            df["bus1"] = df_spatial["bus"]
 
-        # replace default bus with the original
-        df["bus1"] = df_spatial["bus1"]
+        df_all = pd.concat([df_all, df])
 
-        if tyndp_c == "h2-ccgt":
-            df["bus0"] = df_spatial["bus1"] + df["bus0"].str[2:]
-        elif tyndp_c == "H2 Electrolysis":
-            df["bus0"] = df_spatial["bus1"].str[:6]
-
-        m.add("Link", df.index, **df)
+    m.add("Link", df_all.index, **df_all)
 
     logger.info(
         "Readjust conventionals:\n"
         "- Total conventionals capacity in NL to be the same as Open-TYNDP,\n"
-        f"- Distributed by the following carriers:\n{log_map}"
+        f"- Distributed by the following carriers:{'\n-'.join(df_all.carrier.unique())}"
     )
 
     return m
@@ -1259,7 +1281,7 @@ if __name__ == "__main__":
     else:
         nl = readjust_renewables(nl, n_int, mapping=res_tyndp_mapping)
 
-    nl = readjust_conventionals(nl, n_int, mapping=snakemake.params.conv_tyndp_mapping)
+    nl = distribute_conventionals(nl, n_int)
     nl = readjust_storages(nl, n_int, mapping=store_tyndp_mapping)
 
     nl = attach_h2_exogenous_demand(nl, n_int)

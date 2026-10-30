@@ -42,6 +42,7 @@ solving:
       carriers:
         H2: 3000
         AC: 3000
+    custom_extra_functionality: ../data/ISIE/custom_extra_functionality.py
   solver:  # Use commercial solver for high resolution results in SB
     name: gurobi
     options: gurobi-default
@@ -52,7 +53,7 @@ tennet_adjustment:
     enable: true
     type: winter effective
     extendable: false
-    method: circuit # "circuit" , "s_max_pu" or "s_nom_max"
+    method: s_max_pu # "circuit" , "s_max_pu" or "s_nom_max"
     max_circuit: 6
     s_nom_max: 8000
     s_max_pu: 1.1

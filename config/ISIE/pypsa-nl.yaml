@@ -9,7 +9,7 @@ tennet_adjustment:
     enable: true
     type: winter effective
     extendable: false
-    method: circuit # "circuit" , "s_max_pu" or "s_nom_max"
+    method: s_max_pu # "circuit" , "s_max_pu" or "s_nom_max"
     max_circuit: 6
     s_nom_max: 8000
     s_max_pu: 1.1
