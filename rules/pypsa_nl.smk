@@ -28,7 +28,7 @@ def align_configuration(w):
     import yaml
 
     config_temp = {
-        "scenario": {"planning_horizons": [int(w.planning_horizons)]},
+        "planning_horizons": [int(w.horizon)],
         "snapshots": config["snapshots"],
         "atlite": config["atlite"],
         "clustering": {"temporal": config["clustering"]["temporal"]},
@@ -45,30 +45,26 @@ rule create_netherland_core:
         check=align_configuration,
         config="config/ISIE/config.nl-core.yaml",
     output:
-        network=resources("nl_{planning_horizons}.nc"),
+        network=resources("nl_{horizon}.nc"),
     params:
         resolution_sector=config_provider("clustering", "temporal", "resolution_sector"),
     message:
         "Build an unsolved, high-resolution, electricity-only model for the Netherlands"
     shell:
         """
-        snakemake resources/nl-core/networks/base_s_22___{wildcards.planning_horizons}_brownfield.nc --configfile config/ISIE/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call --unlock
-        snakemake resources/nl-core/networks/base_s_22___{wildcards.planning_horizons}_brownfield.nc --configfile config/ISIE/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call
-        mv resources/nl-core/networks/base_s_22___{wildcards.planning_horizons}_brownfield.nc {output}
+        snakemake resources/nl-core/networks/composed_{wildcards.horizon}.nc --configfile config/ISIE/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call --unlock
+        snakemake resources/nl-core/networks/composed_{wildcards.horizon}.nc --configfile config/ISIE/config.nl-core.yaml config.temp.yaml --rerun-incomplete -call
+        mv resources/nl-core/networks/composed_{wildcards.horizon}.nc {output}
         rm config.temp.yaml
         """
 
 
 rule final_adjustment_myopic:
     input:
-        network_nl=resources("nl_{planning_horizons}.nc"),
-        network=resources(
-            "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_brownfield.nc"
-        ),
+        network_nl=resources("nl_{horizon}.nc"),
+        network=resources("networks/composed_{horizon}.nc"),
     output:
-        network=resources(
-            "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_brownfield_adjusted.nc"
-        ),
+        network=resources("networks/composed_{horizon}_adjusted.nc"),
     params:
         tennet_adjustment=config_provider("tennet_adjustment"),
         offshore_buses=config_provider("offshore_buses"),

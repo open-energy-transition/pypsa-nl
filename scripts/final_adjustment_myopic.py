@@ -1248,7 +1248,7 @@ if __name__ == "__main__":
             )
 
     # Adjust and distribute TYNDP components but keep the values consistent
-    year = int(snakemake.wildcards.planning_horizons)
+    year = int(snakemake.wildcards.horizon)
     store_tyndp_mapping = snakemake.params.store_tyndp_mapping
     res_tyndp_mapping = snakemake.params.res_tyndp_mapping
     res_tennet_mapping = snakemake.params.res_tennet_mapping

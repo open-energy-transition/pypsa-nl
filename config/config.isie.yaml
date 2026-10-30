@@ -3,9 +3,9 @@
 #
 # SPDX-License-Identifier: CC0-1.0
 
-# snakemake solve_sector_networks --configfile config/config.tyndp.yaml config/config.isie.yaml -n
+# snakemake solve_networks --configfile config/config.tyndp.yaml config/config.isie.yaml -call
 
-# snakemake solve_sector_networks --configfile config/test/config.tyndp.yaml config/config.isie.yaml -n
+# snakemake solve_networks --configfile config/test/config.tyndp.yaml config/config.isie.yaml -call
 # pixi shell -e open-tyndp
 
 run:
@@ -14,12 +14,8 @@ run:
     enable: false
     file: config/scenarios.tyndp.yaml
 
-scenario:
-  clusters:
-  - all
-  planning_horizons:
-  - 2040
-  # - 2050  # single run myopic
+planning_horizons:
+- 2040
 
 # TODO set foresight
 foresight: myopic
@@ -30,7 +26,8 @@ launch_explorer: true
 
 clustering:
   temporal:
-    resolution_sector: 1H  # Use 1H for high resolution results in SB (requires commercial solver) 168H
+    # Important note: The segmentation (SEG) option is currently not supported, for details https://github.com/open-energy-transition/open-tyndp/pull/345
+    averaging: 1h  # Set to false for 1h high-resolution SB results (requires commercial solver)
 
 final_adjustment: true
 

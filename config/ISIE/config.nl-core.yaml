@@ -4,22 +4,22 @@
 #
 # SPDX-License-Identifier: CC0-1.0
 
-# snakemake resources/nl-core/networks/base_s_22_elec.nc --configfile config/ISIE/config.nl-core.yaml -call
+# snakemake resources/nl-core/networks/composed_2040.nc --configfile config/ISIE/config.nl-core.yaml -call
 
 run:
   name: "nl-core"
 
 foresight: myopic
 
-scenario:
-  clusters:
-  - 22
-  planning_horizons:
-  - 2050
+planning_horizons:
+- 2050
 
 countries: ['BE', 'DE', 'DK', 'GB', 'NL', 'NO']
 
 co2_budget:
+  relative: false
+  upper:
+  lower:
 
 electricity:
   base_network: osm
@@ -142,6 +142,8 @@ clustering:
     to_substations: false
     remove_stubs: false
     remove_stubs_across_borders: false
+  cluster_network:
+    n_clusters: 22
 
 final_adjustment: false
 

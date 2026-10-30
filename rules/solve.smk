@@ -3,10 +3,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+solve_network = "networks/composed_{horizon}"
+solve_network += "_adjusted.nc" if config.get("final_adjustment") else ".nc"
 
 rule solve_network:
     input:
-        network=resources("networks/composed_{horizon}.nc"),
+        network=resources(solve_network),
         offshore_zone_trajectories=branch(
             config_provider("sector", "offshore_hubs_tyndp", "enable"),
             resources("offshore_zone_trajectories.csv"),
