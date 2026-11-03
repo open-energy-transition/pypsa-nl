@@ -68,9 +68,8 @@ rule final_adjustment_myopic:
     params:
         tennet_adjustment=config_provider("tennet_adjustment"),
         offshore_buses=config_provider("offshore_buses"),
-        res_tennet_mapping=config_provider("res_tennet_mapping"),
+        # res_tennet_mapping=config_provider("res_tennet_mapping"),
         res_tyndp_mapping=config_provider("res_tyndp_mapping"),
-        conv_tyndp_mapping=config_provider("conv_tyndp_mapping"),
         store_tyndp_mapping=config_provider("store_tyndp_mapping"),
     message:
         "Combine two networks"

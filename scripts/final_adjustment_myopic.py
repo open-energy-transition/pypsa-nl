@@ -655,11 +655,11 @@ def readjust_load(
 
 def set_renewable_p_nom_max(
     n: pypsa.Network,
-    expandable: dict,
+    adjustment: dict,
 ) -> pypsa.Network:
 
     gens = n.generators
-    for carrier, value in expandable.items():
+    for carrier, value in adjustment.items():
         idx = gens.index[gens.carrier == carrier]
         if value:
             gens.loc[idx, "p_nom_max"] = value
@@ -669,16 +669,24 @@ def set_renewable_p_nom_max(
 
 def make_renewables_expandable(
     n: pypsa.Network,
-    expandable: dict,
+    res_carrier: dict,
     countries: list = ["NL"],
 ) -> pypsa.Network:
 
     gens = n.generators
     buses_idx = n.buses.index[n.buses.country.isin(countries)]
-    exp_idx = gens.index[
-        gens.carrier.isin(expandable.keys()) & gens.bus.isin(buses_idx)
+    res_idx = gens.index[
+        gens.carrier.isin(res_carrier) & gens.bus.isin(buses_idx)
     ]
-    gens.loc[exp_idx, "p_nom_extendable"] = True
+
+    # use p_nom_group to distribute capacity of TYNDP technologies
+    gens.loc[res_idx, "p_nom_extendable"] = True
+    gens.loc[res_idx, "p_nom_group"] = (
+        gens.loc[res_idx]
+        .groupby("carrier")["p_nom"]
+        .transform("sum")
+    )
+    gens.loc[res_idx, "p_nom"] = 0
 
     return n
 
@@ -980,6 +988,26 @@ def readjust_tennet_storages(n, tennet_xlsx, battery_system, scenario="KM", year
     return n
 
 
+def add_extendable_h2_tank(m, n_spatial):
+
+    series = n_spatial.stores[
+        np.isinf(n_spatial.stores.e_nom_max) 
+        & (n_spatial.stores.carrier == "H2 Store")
+    ].mode().iloc[0]
+    series.drop("bus", inplace=True)
+
+    h2_bus = n_spatial.stores[(n_spatial.stores.carrier == "H2 Store")].bus
+
+    df = pd.DataFrame({
+        "bus": h2_bus,
+        **{col: [series[col]] * len(h2_bus) for col in series.index}
+    })
+
+    m.add("Store", df.index, **df)
+
+    return m
+
+
 def retrieve_electricity_weighting(n):
     """Extract the weightings of electricity demand"""
     df_elec = n.loads[(n.loads.carrier == "electricity")].copy()
@@ -993,6 +1021,7 @@ def retrieve_electricity_weighting(n):
 def readjust_storages(
     n_spatial: pypsa.Network,
     n_values: pypsa.Network,
+    extend_h2_tank: bool,
     mapping: dict[str, str],
 ) -> pypsa.Network:
     """
@@ -1102,6 +1131,9 @@ def readjust_storages(
 
                 df = df[df["p_nom"] > 0]
                 m.add("Link", df.index, **df)
+
+            if extend_h2_tank:
+                m = add_extendable_h2_tank(m, n_spatial)
 
         # Add storage
         df_store = df_store[df_store["e_nom"] > 0]
@@ -1251,7 +1283,7 @@ if __name__ == "__main__":
     year = int(snakemake.wildcards.horizon)
     store_tyndp_mapping = snakemake.params.store_tyndp_mapping
     res_tyndp_mapping = snakemake.params.res_tyndp_mapping
-    res_tennet_mapping = snakemake.params.res_tennet_mapping
+    res_tennet_mapping = snakemake.config.get("res_tennet_mapping",{})
 
     if tennet_adjustment["load"]:
         nl = readjust_tennet_load(nl, tennet_xlsx, year=year)
@@ -1266,10 +1298,10 @@ if __name__ == "__main__":
         store_tyndp_mapping.pop("battery", None)
 
     renewables = tennet_adjustment["renewables"]
-    if renewables["expandable"]:
-        n_int = set_renewable_p_nom_max(n_int, expandable=renewables["expandable"])
+    if renewables["adjustment"]:
+        n_int = set_renewable_p_nom_max(n_int, adjustment=renewables["adjustment"])
 
-    if renewables["by_tennet"]:
+    if renewables["by_tennet"] and res_tennet_mapping:
         nl = readjust_tennet_renewables(
             nl,
             n_int,
@@ -1282,7 +1314,12 @@ if __name__ == "__main__":
         nl = readjust_renewables(nl, n_int, mapping=res_tyndp_mapping)
 
     nl = distribute_conventionals(nl, n_int)
-    nl = readjust_storages(nl, n_int, mapping=store_tyndp_mapping)
+    nl = readjust_storages(
+        nl, 
+        n_int,
+        extend_h2_tank=tennet_adjustment["extend_h2_tank"],
+        mapping=store_tyndp_mapping
+    )
 
     nl = attach_h2_exogenous_demand(nl, n_int)
 
@@ -1294,10 +1331,11 @@ if __name__ == "__main__":
 
     m = n.merge(nl)
 
-    if renewables["expandable"]:
-        m = make_renewables_expandable(
-            m, expandable=renewables["expandable"], countries=["NL"]
-        )
+    m = make_renewables_expandable(
+        m,
+        res_carrier=snakemake.config["electricity"]["tyndp_renewable_carriers"],
+        countries=["NL"]
+    )
 
     # Postmerge adjustment to avoid warnings
     m.loads_t.p_set.fillna(m.loads.p_set, inplace=True)

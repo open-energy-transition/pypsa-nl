@@ -19,15 +19,24 @@ tennet_adjustment:
     power_cap: 27000
     max_load: 8
   renewables:
-    extendable:
-      # onwind: 15100.0
+    adjustment:
+      onwind: 15100.0
       solar-pv-utility: 40706.345
       solar-pv-rooftop: 85433.072
-      offwind-ac-fb-r: false
-      offwind-dc-fb-r: false
-      offwind-dc-fb-oh: false
-      offwind-h2-fb-oh: false
     by_tennet: false
+  extendable_carriers:
+    Generator:
+    # - onwind
+    - solar-pv-utility
+    - solar-pv-rooftop
+    - offwind-ac-fb-r
+    - offwind-ac-fl-r
+    - offwind-dc-fb-r
+    - offwind-dc-fl-r
+    - offwind-dc-fb-oh
+    - offwind-dc-fl-oh
+    - offwind-h2-fb-oh
+    - offwind-h2-fl-oh
 
 offshore_buses: true
 
@@ -43,13 +52,13 @@ solving:
     name: gurobi
     options: gurobi-default
 
-res_tennet_mapping:
-  offwind-ac-fb-r: Wind_offshore
-  hydro-ror: Hydro_RoR
-  onwind: Wind_onshore
-  solar-pv-utility: Solar_PV_field
-  solar-pv-rooftop: Solar_PV_households
-  offwind-dc-fb-r: Wind_offshore
+# res_tennet_mapping:
+#   offwind-ac-fb-r: Wind_offshore
+#   hydro-ror: Hydro_RoR
+#   onwind: Wind_onshore
+#   solar-pv-utility: Solar_PV_field
+#   solar-pv-rooftop: Solar_PV_households
+#   offwind-dc-fb-r: Wind_offshore
 
 res_tyndp_mapping:
   offwind-ac-fb-r: offwind-ac
@@ -61,43 +70,6 @@ res_tyndp_mapping:
   offwind-dc-fb-r: offwind-dc
   # offwind-h2-fb-oh: false
   # offwind-dc-fb-oh: offwind-dc
-
-conv_tyndp_mapping:
-  nuclear: nuclear
-  gas-conv-old1: OCGT
-  gas-conv-old2: OCGT
-  gas-ccgt-old1: electricity # distribute by electricity demand (Original: CCGT)
-  gas-ccgt-old2: electricity # distribute by electricity demand (Original: CCGT)
-  gas-ccgt-new: electricity # distribute by electricity demand (Original: CCGT)
-  gas-ccgt-ccs: electricity # distribute by electricity demand (Original: CCGT)
-  gas-ccgt-present1: electricity # distribute by electricity demand (Original: CCGT)
-  gas-ccgt-present2: electricity # distribute by electricity demand (Original: CCGT)
-  gas-ocgt-old: OCGT
-  gas-ocgt-new: OCGT
-  coal-old1: coal
-  coal-old2: coal
-  coal-new: coal
-  coal-ccs: coal
-  lignite-old1: lignite
-  lignite-old2: lignite
-  lignite-new: lignite
-  lignite-ccs: lignite
-  oil-light: oil
-  oil-heavy-old1: oil
-  oil-heavy-old2: oil
-  oil-shale-old: oil
-  oil-shale-new: oil
-  other-non-res-gas-ccgt-old1: electricity # distribute by electricity demand (Original: CCGT)
-  other-res-biomass: electricity # distribute by electricity demand (Original: CCGT)
-  h2-ccgt: electricity # distribute by electricity demand (Original: CCGT)
-  H2 Electrolysis: H2 Electrolysis
-  SMR CC: SMR CC
-
-  # Workaround to drop carriers:
-  CCGT: CCGT
-  SMR: SMR
-  H2 Fuel Cell: H2 Fuel Cell
-  H2 turbine: H2 turbine
 
 store_tyndp_mapping:
   battery: battery

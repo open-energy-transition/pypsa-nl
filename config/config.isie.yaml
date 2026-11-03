@@ -27,7 +27,7 @@ launch_explorer: true
 clustering:
   temporal:
     # Important note: The segmentation (SEG) option is currently not supported, for details https://github.com/open-energy-transition/open-tyndp/pull/345
-    averaging: 1h  # Set to false for 1h high-resolution SB results (requires commercial solver)
+    averaging: false  # Set to false for 1h high-resolution SB results (requires commercial solver)
 
 final_adjustment: true
 
@@ -60,15 +60,35 @@ tennet_adjustment:
     power_cap: 27000
     max_load: 8
     extendable: false
+  extend_h2_tank: true
   renewables:
-    expandable:
-      # onwind: 15100.0
+    adjustment:
+      onwind: 15100.0
       solar-pv-utility: 40706.345
       solar-pv-rooftop: 85433.072
-      offwind-ac-fb-r: false
-      offwind-dc-fb-r: false
-      offwind-dc-fb-oh: false
-      offwind-h2-fb-oh: false
     by_tennet: false
+  extendable_carriers:
+    Generator:
+    # - onwind
+    - solar-pv-utility
+    - solar-pv-rooftop
+    - offwind-ac-fb-r
+    - offwind-ac-fl-r
+    - offwind-dc-fb-r
+    - offwind-dc-fl-r
+    - offwind-dc-fb-oh
+    - offwind-dc-fl-oh
+    - offwind-h2-fb-oh
+    - offwind-h2-fl-oh
+    # - gas-conv-old1
+    # - gas-conv-old2
+    # - gas-ccgt-old1
+    # - gas-ccgt-old2
+    # - gas-ccgt-new
+    # - gas-ccgt-ccs
+    # - gas-ccgt-present1
+    # - gas-ccgt-present2
+    # - gas-ocgt-old
+    # - gas-ocgt-new
 
 offshore_buses: true
