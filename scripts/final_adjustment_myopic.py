@@ -448,9 +448,31 @@ def extract_regionalization(
     tennet_xlsx: str,
     scenario: str = "KM",
     year: int = 2050,
-    filter: dict = {"CARRIER": ["Electricity"]},
+    filter: dict[str, list[str]] = {"CARRIER": ["Electricity"]},
     merge_level: bool = False,
-):
+) -> pd.DataFrame:
+    """
+    Extract TenneT's regionalisation keys per NL region from the Excel file.
+
+    Parameters
+    ----------
+    tennet_xlsx : str
+        Path to TenneT's Excel file.
+    scenario : str, default "KM"
+        Scenario name.
+    year : int, default 2050
+        Target year.
+    filter : dict[str, list[str]]
+        Column-level names mapped to the values to keep.
+    merge_level : bool, default False
+        If True, combine TSO and DSO keys using the TSO/DSO split and sum per
+        sector; otherwise keep ``LEVEL_SECTOR`` columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Regionalisation keys indexed by two-digit region (bus) number.
+    """
 
     df_region = pd.read_excel(
         tennet_xlsx,
@@ -507,11 +529,31 @@ def extract_regionalization(
 
 def readjust_tennet_load(
     n: pypsa.Network, tennet_xlsx: str, scenario: str = "KM", year: int = 2050
-):
+) -> pypsa.Network:
+    """
+    Replace NL electricity loads with TenneT's TSO/DSO demand profiles,
+    regionalised by TenneT's keys.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network whose NL electricity loads are replaced.
+    tennet_xlsx : str
+        Path to TenneT's Excel file.
+    scenario : str, default "KM"
+        Scenario name.
+    year : int, default 2050
+        Target year.
+
+    Returns
+    -------
+    pypsa.Network
+        The network with the new TSO and DSO loads.
+    """
 
     to_drop = n.loads[
         (n.loads["carrier"] == "electricity")
-        & (nl.loads["bus"].map(nl.buses.country) == "NL")
+        & (n.loads["bus"].map(n.buses.country) == "NL")
     ].index
 
     n.remove("Load", to_drop)
@@ -535,7 +577,7 @@ def readjust_tennet_load(
     df_profile.columns = df_profile.columns.map("_".join)
 
     hours = (n.snapshots - n.snapshots[0]).total_seconds() / 3600 + 1
-    df_profile.index = df_profile.index.map(dict(zip(hours.astype(int), nl.snapshots)))
+    df_profile.index = df_profile.index.map(dict(zip(hours.astype(int), n.snapshots)))
     df_profile = df_profile.loc[df_profile.index.dropna()]
 
     for operator in ["TSO", "DSO"]:
@@ -617,48 +659,25 @@ def readjust_load(
     return n_spatial
 
 
-# def make_renewables_expandable(
-#     n_spatial: pypsa.Network,
-#     n_values: pypsa.Network,
-#     mapping: dict[str, str],
-#     expandable: list,
-# ) -> pypsa.Network:
-
-#     tyndp_p_nom_max = n_spatial.generators.groupby("carrier")["p_nom_max"].sum()
-
-#     m = n_values.copy()
-
-#     # use the res_tyndp_mapping to distribute the p_nom_max. If there is more carrier per p_nom_max, use these to split it
-#     gens = m.generators
-#     for b_carrier, t_carrier in mapping.items():
-#         if t_carrier not in tyndp_p_nom_max.index or b_carrier not in expandable:
-#             continue
-#         idx = gens.index[gens.carrier == b_carrier]
-#         if len(idx) == 0:
-#             continue
-#         # split proportionally to existing p_nom_max (if finite), else p_nom, else equally
-#         weights = gens.loc[idx, "p_nom_max"]
-#         if not (
-#             weights.replace([float("inf")], float("nan")).notna().all()
-#             and weights.sum() > 0
-#         ):
-#             weights = gens.loc[idx, "p_nom"]
-#         if weights.sum() <= 0:
-#             weights = pd.Series(1.0, index=idx)
-#         gens.loc[idx, "p_nom_max"] = np.maximum(
-#             tyndp_p_nom_max[t_carrier] * weights / weights.sum(), gens.loc[idx, "p_nom"]
-#         )
-
-#     exp_idx = gens.index[gens.carrier.isin(expandable)]
-#     gens.loc[exp_idx, "p_nom_extendable"] = True
-
-#     return m
-
-
 def set_renewable_p_nom_max(
     n: pypsa.Network,
-    adjustment: dict,
+    adjustment: dict[str, float],
 ) -> pypsa.Network:
+    """
+    Set ``p_nom_max`` of all generators per carrier; falsy values are skipped.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network whose generators are modified.
+    adjustment : dict[str, float]
+        Mapping from carrier to the new ``p_nom_max``.
+
+    Returns
+    -------
+    pypsa.Network
+        The modified network.
+    """
 
     gens = n.generators
     for carrier, value in adjustment.items():
@@ -671,9 +690,27 @@ def set_renewable_p_nom_max(
 
 def make_renewables_expandable(
     n: pypsa.Network,
-    res_carrier: dict,
-    countries: list = ["NL"],
+    res_carrier: list[str],
+    countries: list[str] = ["NL"],
 ) -> pypsa.Network:
+    """
+    Make renewable generators in the given countries extendable, moving their
+    existing capacity per carrier into ``p_nom_group``.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network whose generators are modified.
+    res_carrier : list[str]
+        Renewable carriers to make extendable.
+    countries : list[str], default ["NL"]
+        Countries in which generators are modified.
+
+    Returns
+    -------
+    pypsa.Network
+        The modified network.
+    """
 
     gens = n.generators
     buses_idx = n.buses.index[n.buses.country.isin(countries)]
@@ -698,7 +735,33 @@ def readjust_tennet_renewables(
     mapping_tennet: dict[str, str],
     scenario: str = "KM",
     year: int = 2050,
-):
+) -> pypsa.Network:
+    """
+    Replace NL renewable generators in ``n_spatial`` with those of ``n_values``,
+    distributed across NL regions using TenneT's supply regionalisation keys.
+
+    Parameters
+    ----------
+    n_spatial : pypsa.Network
+        Spatial network whose renewable generators are replaced.
+    n_values : pypsa.Network
+        Aggregated network providing capacities and profiles.
+    tennet_xlsx : str
+        Path to TenneT's Excel file.
+    mapping_tyndp : dict[str, str]
+        Mapping from TYNDP carriers to spatial carriers; the latter are dropped.
+    mapping_tennet : dict[str, str]
+        Mapping from TYNDP carriers to TenneT supply sectors.
+    scenario : str, default "KM"
+        Scenario name.
+    year : int, default 2050
+        Target year.
+
+    Returns
+    -------
+    pypsa.Network
+        Copy of ``n_spatial`` with the redistributed renewable generators.
+    """
 
     df_region = extract_regionalization(
         tennet_xlsx,
@@ -936,7 +999,36 @@ def distribute_conventionals(
     return m
 
 
-def readjust_tennet_storages(n, tennet_xlsx, battery_system, scenario="KM", year=2050):
+def readjust_tennet_storages(
+    n: pypsa.Network,
+    tennet_xlsx: str,
+    battery_system: dict,
+    scenario: str = "KM",
+    year: int = 2050,
+) -> pypsa.Network:
+    """
+    Set NL battery store and charger/discharger capacities and extendability
+    from ``battery_system``, distributed with TenneT's regionalisation keys.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network containing the NL battery stores and links.
+    tennet_xlsx : str
+        Path to TenneT's Excel file.
+    battery_system : dict
+        Battery settings with keys ``power_cap``, ``max_load`` and
+        ``extendable``.
+    scenario : str, default "KM"
+        Scenario name.
+    year : int, default 2050
+        Target year.
+
+    Returns
+    -------
+    pypsa.Network
+        The modified network.
+    """
 
     factor = extract_regionalization(
         tennet_xlsx,
@@ -987,7 +1079,25 @@ def readjust_tennet_storages(n, tennet_xlsx, battery_system, scenario="KM", year
     return n
 
 
-def add_extendable_h2_tank(m, n_spatial):
+def add_extendable_h2_tank(
+    m: pypsa.Network, n_spatial: pypsa.Network
+) -> pypsa.Network:
+    """
+    Add an extendable H2 store to ``m`` at every H2 store bus of ``n_spatial``,
+    using the most common unbounded ``H2 Store`` parameters.
+
+    Parameters
+    ----------
+    m : pypsa.Network
+        Network to which the stores are added.
+    n_spatial : pypsa.Network
+        Spatial network providing the H2 store buses and parameters.
+
+    Returns
+    -------
+    pypsa.Network
+        The network ``m`` with the added stores.
+    """
 
     series = (
         n_spatial.stores[

@@ -3,9 +3,25 @@
 # SPDX-License-Identifier: MIT
 
 
-def add_battery_duration_fix(n, snakemake):
+import pypsa
+from snakemake.script import Snakemake
+
+
+def add_battery_duration_fix(n: pypsa.Network, snakemake: Snakemake) -> None:
     """
-    Add constraint ensuring that P/E ratio for battery in NL is proportional to max hours
+    Constrain the battery energy/power ratio for extendable batteries in NL.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network with an already created linopy model (``n.model``).
+    snakemake : snakemake.script.Snakemake
+        Snakemake object providing access to the workflow ``config``.
+
+    Returns
+    -------
+    None
+        The network's optimisation model is modified in place.
     """
 
     bus_country = n.buses.index[n.buses.country.isin(["NL"])]
@@ -33,7 +49,26 @@ def add_battery_duration_fix(n, snakemake):
         n.model.add_constraints(expr, name="NL-Battery-duration")
 
 
-def distribute_TYNDP_carrier_limit(n, snakemake):
+def distribute_TYNDP_carrier_limit(n: pypsa.Network, snakemake: Snakemake) -> None:
+    """
+    Distribute TYNDP capacity targets over extendable links and generators.
+
+    Components with a non-null ``p_nom_group`` (the TYNDP capacity target for
+    their carrier) and ``p_nom_extendable`` set are grouped by carrier.
+    Constraints are skipped for empty selections.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network with an already created linopy model (``n.model``).
+    snakemake : snakemake.script.Snakemake
+        Snakemake object providing access to the workflow ``config``.
+
+    Returns
+    -------
+    None
+        The network's optimisation model is modified in place.
+    """
     expandable = snakemake.config["tennet_adjustment"]["extendable_carriers"][
         "Generator"
     ]

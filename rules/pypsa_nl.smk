@@ -15,7 +15,7 @@ rule build_tennet_busshapes:
         pockets_traces="data/ISIE/pockets_traces.geojson",
     output:
         # pockets_archetypes=resources("pockets_archetypes_{clusters}_{base_network}.geojson"),
-        busshape="data/busshapes/base_s_{clusters}_{base_network}.geojson",
+        busshape="data/busshapes/simplified_{clusters}_osm.geojson",
     message:
         "Building the busshape based on TenneT"
     # log:
