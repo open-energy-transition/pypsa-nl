@@ -7,47 +7,42 @@ tennet_adjustment:
   tennet_xlsx: "data/ISIE/260821 - ElSysOp transfer capacities and regionalisation_transmission_2040.xlsx"
   tennet_capacity:
     enable: true
-    type: winter effective
-    extendable: false
+    type: summer effective
+    extendable: true
     method: s_max_pu # "circuit" , "s_max_pu" or "s_nom_max"
     max_circuit: 6
     s_nom_max: 8000
-    s_max_pu: 1.1
+    s_max_pu: 2.0
   load: true
   battery_system:
     enable: true
-    power_cap: 27000
+    power_cap: 0 # 27000
     max_load: 8
+    extendable: true
+  extend_h2_tank: true
   renewables:
-    adjustment:
-      onwind: 15100.0
-      solar-pv-utility: 40706.345
-      solar-pv-rooftop: 85433.072
+    adjustment: []
+      # onwind: 15100.0
+      # solar-pv-utility: 40706.345
+      # solar-pv-rooftop: 85433.072
     by_tennet: false
   extendable_carriers:
-    Generator:
+    Generator: []
     # - onwind
-    - solar-pv-utility
-    - solar-pv-rooftop
-    - offwind-ac-fb-r
-    - offwind-ac-fl-r
-    - offwind-dc-fb-r
-    - offwind-dc-fl-r
-    - offwind-dc-fb-oh
-    - offwind-dc-fl-oh
-    - offwind-h2-fb-oh
-    - offwind-h2-fl-oh
+    # - solar-pv-utility
+    # - solar-pv-rooftop
+    # - offwind-ac-fb-r
+    # - offwind-ac-fl-r
+    # - offwind-dc-fb-r
+    # - offwind-dc-fl-r
+    # - offwind-dc-fb-oh
+    # - offwind-dc-fl-oh
+    # - offwind-h2-fb-oh
+    # - offwind-h2-fl-oh
 
 offshore_buses: true
 
 solving:
-  options:
-    load_shedding:
-      enable: true
-      all_carriers: false
-      carriers:
-        H2: 3000
-        AC: 3000
   solver:  # Use commercial solver for high resolution results in SB
     name: gurobi
     options: gurobi-default

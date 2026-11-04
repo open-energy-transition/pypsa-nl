@@ -6,6 +6,7 @@
 solve_network = "networks/composed_{horizon}"
 solve_network += "_adjusted.nc" if config.get("final_adjustment") else ".nc"
 
+
 rule solve_network:
     input:
         network=resources(solve_network),

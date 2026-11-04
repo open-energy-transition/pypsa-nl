@@ -186,3 +186,19 @@ all,2035,BtL,efficiency,0.63,per unit,"TYNDP 2024 Supply Tool, Conversion factor
 all,2040,BtL,efficiency,0.66,per unit,"TYNDP 2024 Supply Tool, Conversion factors","NCV"
 all,2045,BtL,efficiency,0.68,per unit,"TYNDP 2024 Supply Tool, Conversion factors","NCV"
 all,2050,BtL,efficiency,0.70,per unit,"TYNDP 2024 Supply Tool, Conversion factors","NCV"
+all,all,HVAC overhead,investment,1400,EUR/MW/km,"ISIE Transmission Price",
+all,all,HVAC underground,investment,4510,EUR/MW/km,"ISIE Transmission Price",
+all,all,HVAC submarine,investment,4510,EUR/MW/km,"ISIE Transmission Price",
+all,all,HVDC overhead,investment,600,EUR/MW/km,"ISIE Transmission Price",
+all,all,HVDC underground,investment,4070,EUR/MW/km,"ISIE Transmission Price",
+all,all,HVDC submarine,investment,3220,EUR/MW/km,"ISIE Transmission Price",
+all,all,HVDC inverter pair,investment,700,EUR/kW,"ISIE Transmission Price",
+all,2030,battery storage,investment,67.97,EUR/kWh,"ISIE Battery Price",
+all,2040,battery storage,investment,60.17,EUR/kWh,"ISIE Battery Price",
+all,2050,battery storage,investment,60.14,EUR/kWh,"ISIE Battery Price",
+all,2030,battery inverter,investment,60.71,EUR/kWh,"ISIE Inverter Learning Curve",
+all,2040,battery inverter,investment,46.88,EUR/kWh,"ISIE Inverter Learning Curve",
+all,2050,battery inverter,investment,40.7,EUR/kWh,"ISIE Inverter Learning Curve",
+all,2030,battery inverter,lifetime,23.33,years,"ISIE Inverter Learning Curve",
+all,2040,battery inverter,lifetime,30,years,"ISIE Inverter Learning Curve",
+all,2050,battery inverter,lifetime,30,years,"ISIE Inverter Learning Curve",

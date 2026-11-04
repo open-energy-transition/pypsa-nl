@@ -346,8 +346,9 @@ def adjust_tennet_connection(
     # map capacities
     n.lines.loc[df.index, "s_nom"] = df[tennet_capacity["type"]]
 
+    n.lines.loc[df.index, "s_nom_extendable"] = True
+
     if tennet_capacity["extendable"]:
-        n.lines.loc[df.index, "s_nom_extendable"] = True
         if tennet_capacity["method"] == "circuit":
             n.lines.loc[df.index, "s_nom_max"] = np.maximum(
                 tennet_capacity["max_circuit"]
@@ -379,7 +380,8 @@ def adjust_tennet_connection(
             )
 
     else:
-        log_info = "not extendable"
+        n.lines.loc[df.index, "s_nom_max"] = df[tennet_capacity["type"]]
+        log_info = "not extendable, but subtractable"
 
     n.lines.loc[df.index, "s_max_pu"] = 1.0
 
@@ -675,18 +677,15 @@ def make_renewables_expandable(
 
     gens = n.generators
     buses_idx = n.buses.index[n.buses.country.isin(countries)]
-    res_idx = gens.index[
-        gens.carrier.isin(res_carrier) & gens.bus.isin(buses_idx)
-    ]
+    res_idx = gens.index[gens.carrier.isin(res_carrier) & gens.bus.isin(buses_idx)]
 
     # use p_nom_group to distribute capacity of TYNDP technologies
     gens.loc[res_idx, "p_nom_extendable"] = True
     gens.loc[res_idx, "p_nom_group"] = (
-        gens.loc[res_idx]
-        .groupby("carrier")["p_nom"]
-        .transform("sum")
+        gens.loc[res_idx].groupby("carrier")["p_nom"].transform("sum")
     )
     gens.loc[res_idx, "p_nom"] = 0
+    gens.loc[res_idx, "p_nom_min"] = 0
 
     return n
 
@@ -990,18 +989,21 @@ def readjust_tennet_storages(n, tennet_xlsx, battery_system, scenario="KM", year
 
 def add_extendable_h2_tank(m, n_spatial):
 
-    series = n_spatial.stores[
-        np.isinf(n_spatial.stores.e_nom_max) 
-        & (n_spatial.stores.carrier == "H2 Store")
-    ].mode().iloc[0]
+    series = (
+        n_spatial.stores[
+            np.isinf(n_spatial.stores.e_nom_max)
+            & (n_spatial.stores.carrier == "H2 Store")
+        ]
+        .mode()
+        .iloc[0]
+    )
     series.drop("bus", inplace=True)
 
     h2_bus = n_spatial.stores[(n_spatial.stores.carrier == "H2 Store")].bus
 
-    df = pd.DataFrame({
-        "bus": h2_bus,
-        **{col: [series[col]] * len(h2_bus) for col in series.index}
-    })
+    df = pd.DataFrame(
+        {"bus": h2_bus, **{col: [series[col]] * len(h2_bus) for col in series.index}}
+    )
 
     m.add("Store", df.index, **df)
 
@@ -1283,7 +1285,7 @@ if __name__ == "__main__":
     year = int(snakemake.wildcards.horizon)
     store_tyndp_mapping = snakemake.params.store_tyndp_mapping
     res_tyndp_mapping = snakemake.params.res_tyndp_mapping
-    res_tennet_mapping = snakemake.config.get("res_tennet_mapping",{})
+    res_tennet_mapping = snakemake.config.get("res_tennet_mapping", {})
 
     if tennet_adjustment["load"]:
         nl = readjust_tennet_load(nl, tennet_xlsx, year=year)
@@ -1315,10 +1317,10 @@ if __name__ == "__main__":
 
     nl = distribute_conventionals(nl, n_int)
     nl = readjust_storages(
-        nl, 
+        nl,
         n_int,
         extend_h2_tank=tennet_adjustment["extend_h2_tank"],
-        mapping=store_tyndp_mapping
+        mapping=store_tyndp_mapping,
     )
 
     nl = attach_h2_exogenous_demand(nl, n_int)
@@ -1334,7 +1336,7 @@ if __name__ == "__main__":
     m = make_renewables_expandable(
         m,
         res_carrier=snakemake.config["electricity"]["tyndp_renewable_carriers"],
-        countries=["NL"]
+        countries=["NL"],
     )
 
     # Postmerge adjustment to avoid warnings
