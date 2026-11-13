@@ -528,7 +528,11 @@ def extract_regionalization(
 
 
 def readjust_tennet_load(
-    n: pypsa.Network, tennet_xlsx: str, scenario: str = "KM", year: int = 2050
+    n: pypsa.Network,
+    tennet_xlsx: str,
+    refactor: dict | bool = False,
+    scenario: str = "KM",
+    year: int = 2050,
 ) -> pypsa.Network:
     """
     Replace NL electricity loads with TenneT's TSO/DSO demand profiles,
@@ -579,6 +583,10 @@ def readjust_tennet_load(
     hours = (n.snapshots - n.snapshots[0]).total_seconds() / 3600 + 1
     df_profile.index = df_profile.index.map(dict(zip(hours.astype(int), n.snapshots)))
     df_profile = df_profile.loc[df_profile.index.dropna()]
+
+    if refactor:
+        for k, v in refactor.items():
+            df_profile[k] *= v
 
     for operator in ["TSO", "DSO"]:
         df1 = df_region.filter(like=operator).copy()
@@ -1002,6 +1010,7 @@ def distribute_conventionals(
 def readjust_tennet_storages(
     n: pypsa.Network,
     tennet_xlsx: str,
+    carrier: str,
     battery_system: dict,
     scenario: str = "KM",
     year: int = 2050,
@@ -1016,6 +1025,8 @@ def readjust_tennet_storages(
         Network containing the NL battery stores and links.
     tennet_xlsx : str
         Path to TenneT's Excel file.
+    carrier: str
+        Battery carrier name.
     battery_system : dict
         Battery settings with keys ``power_cap``, ``max_load`` and
         ``extendable``.
@@ -1030,21 +1041,23 @@ def readjust_tennet_storages(
         The modified network.
     """
 
+    level = "DSO" if carrier == "home battery" else "TSO"
+
     factor = extract_regionalization(
         tennet_xlsx,
         scenario=scenario,
         year=year,
         filter={"SECTOR": ["Battery_system"]},
-        merge_level=True,
-    )["Battery_system"]
+        merge_level=False,
+    )[f"{level}_Battery_system"]
 
     index = factor.index
     df_sys = pd.DataFrame(
         {
             "factor": factor,
-            "store_name": [f"NL{i}AC battery-{year}" for i in index],
-            "charger_name": [f"NL{i}AC battery charger-{year}" for i in index],
-            "discharger_name": [f"NL{i}AC battery discharger-{year}" for i in index],
+            "store_name": [f"NL{i}AC {carrier}-{year}" for i in index],
+            "charger_name": [f"NL{i}AC {carrier} charger-{year}" for i in index],
+            "discharger_name": [f"NL{i}AC {carrier} discharger-{year}" for i in index],
             "power_capacity": factor * battery_system["power_cap"],
             "energy_capacity": factor
             * battery_system["power_cap"]
@@ -1072,16 +1085,14 @@ def readjust_tennet_storages(
     logger.info(
         "Readjust storage:\n"
         f"- Set battery to {battery_system['power_cap']} MW,\n"
-        "- All located in high voltage.\n"
+        f"- All located in {level}.\n"
         "- Distributed using TenneT's factor."
     )
 
     return n
 
 
-def add_extendable_h2_tank(
-    m: pypsa.Network, n_spatial: pypsa.Network
-) -> pypsa.Network:
+def add_extendable_h2_tank(m: pypsa.Network, n_spatial: pypsa.Network) -> pypsa.Network:
     """
     Add an extendable H2 store to ``m`` at every H2 store bus of ``n_spatial``,
     using the most common unbounded ``H2 Store`` parameters.
@@ -1397,17 +1408,33 @@ if __name__ == "__main__":
     res_tyndp_mapping = snakemake.params.res_tyndp_mapping
     res_tennet_mapping = snakemake.config.get("res_tennet_mapping", {})
 
-    if tennet_adjustment["load"]:
-        nl = readjust_tennet_load(nl, tennet_xlsx, year=year)
+    if tennet_adjustment["load"]["enable"]:
+        nl = readjust_tennet_load(
+            nl, tennet_xlsx, refactor=tennet_adjustment["load"]["refactor"], year=year
+        )
     else:
         nl = readjust_load(nl, n_int, carriers=["electricity"])
 
     battery_system = tennet_adjustment["battery_system"]
-    if battery_system["enable"]:
+    if battery_system["TSO"]["enable"]:
         nl = readjust_tennet_storages(
-            nl, tennet_xlsx, battery_system=battery_system, year=year
+            nl,
+            tennet_xlsx,
+            carrier="battery",
+            battery_system=battery_system["TSO"],
+            year=year,
         )
         store_tyndp_mapping.pop("battery", None)
+
+    if battery_system["DSO"]["enable"]:
+        nl = readjust_tennet_storages(
+            nl,
+            tennet_xlsx,
+            carrier="home battery",
+            battery_system=battery_system["DSO"],
+            year=year,
+        )
+        store_tyndp_mapping.pop("home battery", None)
 
     renewables = tennet_adjustment["renewables"]
     if renewables["adjustment"]:

@@ -23,6 +23,11 @@ co2_budget:
 
 electricity:
   base_network: osm
+  extendable_carriers:
+    Store:
+    - battery
+    - home battery
+    - H2
   renewable_carriers: [solar, onwind, offwind-ac, offwind-dc] # solar-hsat, hydro (very small), offwind-float
   transmission_limit: v1.0
 

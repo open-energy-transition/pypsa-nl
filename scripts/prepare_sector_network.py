@@ -3136,6 +3136,14 @@ def insert_electricity_distribution_grid(
     loads = n.loads.index[n.loads.carrier.str.contains("electric")]
     n.loads.loc[loads, "bus"] += " low voltage"
 
+    home_battery_charger = n.links.index[n.links.carrier == "home battery charger"]
+    n.links.loc[home_battery_charger, "bus0"] += " low voltage"
+
+    home_battery_discharger = n.links.index[
+        n.links.carrier == "home battery discharger"
+    ]
+    n.links.loc[home_battery_discharger, "bus1"] += " low voltage"
+
     bevs = n.links.index[n.links.carrier == "BEV charger"]
     n.links.loc[bevs, "bus0"] += " low voltage"
 

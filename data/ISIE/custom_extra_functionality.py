@@ -26,27 +26,28 @@ def add_battery_duration_fix(n: pypsa.Network, snakemake: Snakemake) -> None:
 
     bus_country = n.buses.index[n.buses.country.isin(["NL"])]
 
-    energy_bool = n.stores.carrier.isin(["battery"]) & n.stores.bus.isin(bus_country)
-    energy_ext = n.stores[energy_bool].query("e_nom_extendable")
+    for carrier in ["battery", "home battery"]:
+        level = "DSO" if carrier == "home battery" else "TSO"
 
-    charger_bool = n.links.carrier.isin(["battery charger"]) & n.links.bus0.isin(
-        bus_country
-    )
-    chargers_ext = n.links[charger_bool].query("p_nom_extendable")
+        energy_bool = n.stores.carrier.isin([carrier]) & n.stores.bus.isin(bus_country)
+        energy_ext = n.stores[energy_bool].query("e_nom_extendable")
 
-    max_hours = (
-        snakemake.config.get("tennet_adjustment", {})
-        .get("battery_system", {})
-        .get("max_load", snakemake.config["electricity"]["max_hours"]["battery"])
-    )
+        charger_bool = n.links.carrier.isin([f"{carrier} charger"]) & n.links.bus0.isin(
+            bus_country
+        )
+        chargers_ext = n.links[charger_bool].query("p_nom_extendable")
 
-    if not energy_ext.empty and not chargers_ext.empty:
-        expr = (
-            n.model["Store-e_nom"].loc[energy_ext.index]
-            == n.model["Link-p_nom"].loc[chargers_ext.index] * max_hours
+        max_hours = snakemake.config["tennet_adjustment"]["battery_system"][level].get(
+            "max_load", snakemake.config["electricity"]["max_hours"]["battery"]
         )
 
-        n.model.add_constraints(expr, name="NL-Battery-duration")
+        if not energy_ext.empty and not chargers_ext.empty:
+            expr = (
+                n.model["Store-e_nom"].loc[energy_ext.index]
+                == n.model["Link-p_nom"].loc[chargers_ext.index] * max_hours
+            )
+
+            n.model.add_constraints(expr, name=f"NL-{carrier}-duration")
 
 
 def distribute_TYNDP_carrier_limit(n: pypsa.Network, snakemake: Snakemake) -> None:

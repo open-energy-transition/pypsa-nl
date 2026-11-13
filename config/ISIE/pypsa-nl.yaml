@@ -13,12 +13,22 @@ tennet_adjustment:
     max_circuit: 6
     s_nom_max: 8000
     s_max_pu: 2.0
-  load: true
-  battery_system:
+  load:
     enable: true
-    power_cap: 0 # 27000
-    max_load: 8
-    extendable: true
+    refactor: false
+      # DSO_Households_hp_electric: 0.5 # Minder Elektrificatie
+      # DSO_Households_hp_hybrid: 2.26 # Minder Elektrificatie
+  battery_system:
+    TSO:
+      enable: true
+      power_cap: 0
+      max_load: 8
+      extendable: true
+    DSO:
+      enable: true
+      power_cap: 0
+      max_load: 4
+      extendable: true
   extend_h2_tank: true
   renewables:
     adjustment: []
@@ -68,4 +78,5 @@ res_tyndp_mapping:
 
 store_tyndp_mapping:
   battery: battery
+  home battery: home battery
   H2 cavern-storage: H2 Store
