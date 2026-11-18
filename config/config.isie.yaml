@@ -33,7 +33,7 @@ final_adjustment: true
 
 solving:
   options:
-    custom_extra_functionality: ../data/ISIE/custom_extra_functionality.py
+    custom_extra_functionality: ../scripts/isie/custom_extra_functionality.py
   solver:  # Use commercial solver for high resolution results in SB
     name: gurobi
     options: gurobi-default
@@ -48,6 +48,7 @@ tennet_adjustment:
     max_circuit: 6
     s_nom_max: 8000
     s_max_pu: 2.0
+  offshore_buses: true
   load:
     enable: true
     refactor: false
@@ -66,33 +67,22 @@ tennet_adjustment:
       extendable: false
   extend_h2_tank: true
   renewables:
-    adjustment: []
-      # onwind: 15100.0
-      # solar-pv-utility: 40706.345
-      # solar-pv-rooftop: 85433.072
+    adjustment:
+      onwind: 20000.0
+      solar-pv-utility: 58517.8878
+      solar-pv-rooftop: 124579.8892
     by_tennet: false
+  min_ext_factor: 0.0
   extendable_carriers:
-    Generator: []
-    # - onwind
-    # - solar-pv-utility
-    # - solar-pv-rooftop
-    # - offwind-ac-fb-r
-    # - offwind-ac-fl-r
-    # - offwind-dc-fb-r
-    # - offwind-dc-fl-r
-    # - offwind-dc-fb-oh
-    # - offwind-dc-fl-oh
-    # - offwind-h2-fb-oh
-    # - offwind-h2-fl-oh
-    # - gas-conv-old1
-    # - gas-conv-old2
-    # - gas-ccgt-old1
-    # - gas-ccgt-old2
-    # - gas-ccgt-new
-    # - gas-ccgt-ccs
-    # - gas-ccgt-present1
-    # - gas-ccgt-present2
-    # - gas-ocgt-old
-    # - gas-ocgt-new
-
-offshore_buses: true
+  - onwind
+  - solar-pv-utility
+  - solar-pv-rooftop
+  - offwind-ac-fb-r
+  - offwind-ac-fl-r
+  - offwind-dc-fb-r
+  - offwind-dc-fl-r
+  - offwind-dc-fb-oh
+  - offwind-dc-fl-oh
+  - offwind-h2-fb-oh
+  - offwind-h2-fl-oh
+  - h2-ccgt

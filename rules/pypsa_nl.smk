@@ -21,7 +21,7 @@ rule build_tennet_busshapes:
     # log:
     #     logs("build_tennet_busshapes_{clusters}_{base_network}.log"),
     script:
-        scripts("build_tennet_busshapes.py")
+        scripts("isie/build_tennet_busshapes.py")
 
 
 def align_configuration(w):
@@ -59,7 +59,7 @@ rule create_netherland_core:
         """
 
 
-rule final_adjustment_myopic:
+rule final_adjustment:
     input:
         network_nl=resources("nl_{horizon}.nc"),
         network=resources("networks/composed_{horizon}.nc"),
@@ -67,11 +67,36 @@ rule final_adjustment_myopic:
         network=resources("networks/composed_{horizon}_adjusted.nc"),
     params:
         tennet_adjustment=config_provider("tennet_adjustment"),
-        offshore_buses=config_provider("offshore_buses"),
         # res_tennet_mapping=config_provider("res_tennet_mapping"),
         res_tyndp_mapping=config_provider("res_tyndp_mapping"),
         store_tyndp_mapping=config_provider("store_tyndp_mapping"),
     message:
         "Combine two networks"
     script:
-        scripts("final_adjustment_myopic.py")
+        scripts("isie/final_adjustment.py")
+
+
+if config.get("isie"):
+
+    rule integrate_local_flex:
+        input:
+            network=resources("networks/composed_{horizon}_adjusted.nc"),
+            isie_input=config["isie"]["input"],
+        output:
+            network=resources("networks/composed_{horizon}_adjusted_isie.nc"),
+        script:
+            scripts("isie/integrate_local_flex.py")
+
+    rule generate_prices:
+        input:
+            expand(
+                RESULTS + "networks/solved_{horizon}.nc",
+                run=config["run"]["name"],
+                horizon=config["planning_horizons"][-1],
+            ),
+        output:
+            isie_output=config["isie"]["output"],
+        script:
+            scripts("isie/generate_prices.py")
+
+    solve_network = resources("networks/composed_{horizon}_adjusted_isie.nc")

@@ -132,7 +132,11 @@ include: "rules/solve.smk"
 include: "rules/postprocess.smk"
 include: "rules/development.smk"
 include: "rules/report.smk"
-include: "rules/pypsa_nl.smk"
+
+
+if config.get("final_adjustment"):
+
+    include: "rules/pypsa_nl.smk"
 
 
 # Specific Open-TYNDP rules and configurations

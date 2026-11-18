@@ -70,9 +70,8 @@ def distribute_TYNDP_carrier_limit(n: pypsa.Network, snakemake: Snakemake) -> No
     None
         The network's optimisation model is modified in place.
     """
-    expandable = snakemake.config["tennet_adjustment"]["extendable_carriers"][
-        "Generator"
-    ]
+    expandable = snakemake.config["tennet_adjustment"]["extendable_carriers"]
+    min_ext_factor = snakemake.config["tennet_adjustment"]["min_ext_factor"]
 
     # For Links
     link_p_nom_bool = ~n.links.p_nom_group.isna() & ~n.links.carrier.isin(expandable)
@@ -98,10 +97,10 @@ def distribute_TYNDP_carrier_limit(n: pypsa.Network, snakemake: Snakemake) -> No
             .loc[link_p_min.index]
             .groupby(link_p_min.carrier)
             .sum()
-            >= link_p_min.groupby("carrier")["p_nom_group"].mean()
+            >= link_p_min.groupby("carrier")["p_nom_group"].mean() * min_ext_factor
         )
 
-        n.model.add_constraints(expr_2, name="Link-min-TYNDP")
+        n.model.add_constraints(expr_2, name=f"Link-min{min_ext_factor}-TYNDP")
 
     # For Generators
     gen_p_nom_bool = ~n.generators.p_nom_group.isna() & ~n.generators.carrier.isin(
@@ -131,10 +130,10 @@ def distribute_TYNDP_carrier_limit(n: pypsa.Network, snakemake: Snakemake) -> No
             .loc[gen_p_min.index]
             .groupby(gen_p_min.carrier)
             .sum()
-            >= gen_p_min.groupby("carrier")["p_nom_group"].mean()
+            >= gen_p_min.groupby("carrier")["p_nom_group"].mean() * min_ext_factor
         )
 
-        n.model.add_constraints(expr_4, name="Generator-min-TYNDP")
+        n.model.add_constraints(expr_4, name=f"Generator-min{min_ext_factor}-TYNDP")
 
 
 def custom_extra_functionality(n, snapshots, snakemake):

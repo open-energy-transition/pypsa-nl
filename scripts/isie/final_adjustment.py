@@ -1332,7 +1332,7 @@ if __name__ == "__main__":
         from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "final_adjustment_myopic",
+            "final_adjustment",
             configfiles="config/config.tyndp-isie.yaml",
             clusters="all",
             opts="",
@@ -1365,7 +1365,7 @@ if __name__ == "__main__":
     n_int = keep_country(n, ["NL"])
 
     # Ad Hoc lines adjustment in the UK interconnections due to offshore buses
-    if snakemake.params.offshore_buses:
+    if tennet_adjustment["offshore_buses"]:
         keep = [
             "NLOH001",
             "NLOH001 H2",
