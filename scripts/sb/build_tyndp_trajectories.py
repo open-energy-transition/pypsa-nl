@@ -48,7 +48,10 @@ if __name__ == "__main__":
 
     # TODO: How to add buildout information if even necessary
     # Trajectories other than Nuclear are only used for DE and GA scenarios
-    trajectories_id = [] if tyndp_scenario == "NT" else ["All"]
+    # ISIE Overwrite: make trajectories independent from tyndp_scenario
+    overwrite = snakemake.config.get("include_trajectory", False)
+    trajectories_id = [] if tyndp_scenario == "NT" and not overwrite else ["All"]
+
     df = (
         pd.read_excel(fn, sheet_name="GLOBAL")
         .rename(column_names, axis="columns")

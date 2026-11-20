@@ -9,7 +9,7 @@
 # pixi shell -e open-tyndp
 
 run:
-  name: "tyndp-isie-2050"
+  name: tyndp-isie-2050
   scenarios:
     enable: false
     file: config/scenarios.tyndp.yaml
@@ -21,6 +21,7 @@ planning_horizons:
 foresight: myopic
 
 tyndp_scenario: NT
+include_trajectory: true # ISIE Overwrite from NT
 
 launch_explorer: true
 
@@ -29,7 +30,9 @@ clustering:
     # Important note: The segmentation (SEG) option is currently not supported, for details https://github.com/open-energy-transition/open-tyndp/pull/345
     averaging: false  # Set to false for 1h high-resolution SB results (requires commercial solver)
 
-final_adjustment: true
+sector:
+  force_biomass_potential: false
+  force_biogas_potential: false
 
 solving:
   options:
@@ -38,13 +41,19 @@ solving:
     name: gurobi
     options: gurobi-default
 
+isie_workflow:
+  year: 2050
+  regionalize: true
+  iterate: false
+
 tennet_adjustment:
   tennet_xlsx: "data/ISIE/260821 - ElSysOp transfer capacities and regionalisation_transmission_2040.xlsx"
   tennet_capacity:
     enable: true
-    type: summer effective
+    year: "2026"
+    type: winter effective
     extendable: true
-    method: s_max_pu # "circuit" , "s_max_pu" or "s_nom_max"
+    method: s_nom_max # "circuit" , "s_max_pu" or "s_nom_max"
     max_circuit: 6
     s_nom_max: 8000
     s_max_pu: 2.0
@@ -65,12 +74,9 @@ tennet_adjustment:
       power_cap: 8400
       max_load: 4
       extendable: false
+    extendable: false
   extend_h2_tank: true
   renewables:
-    adjustment:
-      onwind: 20000.0
-      solar-pv-utility: 58517.8878
-      solar-pv-rooftop: 124579.8892
     by_tennet: false
   min_ext_factor: 0.0
   extendable_carriers:
@@ -85,4 +91,3 @@ tennet_adjustment:
   - offwind-dc-fl-oh
   - offwind-h2-fb-oh
   - offwind-h2-fl-oh
-  - h2-ccgt

@@ -150,7 +150,7 @@ clustering:
   cluster_network:
     n_clusters: 22
 
-final_adjustment: false
+isie_workflow: true
 
 # * Move custom busmaps to
 #   ``data/busmaps/elec_s{simpl}_{clusters}_{base_network}.csv``. This allows for

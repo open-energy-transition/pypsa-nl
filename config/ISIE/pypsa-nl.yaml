@@ -7,12 +7,14 @@ tennet_adjustment:
   tennet_xlsx: "data/ISIE/260821 - ElSysOp transfer capacities and regionalisation_transmission_2040.xlsx"
   tennet_capacity:
     enable: true
-    type: summer effective
+    year: "2026"
+    type: winter effective
     extendable: true
-    method: s_max_pu # "circuit" , "s_max_pu" or "s_nom_max"
+    method: s_nom_max # "circuit" , "s_max_pu" or "s_nom_max"
     max_circuit: 6
     s_nom_max: 8000
     s_max_pu: 2.0
+  offshore_buses: true
   load:
     enable: true
     refactor: false
@@ -21,41 +23,31 @@ tennet_adjustment:
   battery_system:
     TSO:
       enable: true
-      power_cap: 0
+      power_cap: 27000
       max_load: 8
-      extendable: true
+      extendable: false
     DSO:
       enable: true
-      power_cap: 0
+      power_cap: 8400
       max_load: 4
-      extendable: true
+      extendable: false
+    extendable: false
   extend_h2_tank: true
   renewables:
-    adjustment: []
-      # onwind: 15100.0
-      # solar-pv-utility: 40706.345
-      # solar-pv-rooftop: 85433.072
     by_tennet: false
+  min_ext_factor: 0.0
   extendable_carriers:
-    Generator: []
-    # - onwind
-    # - solar-pv-utility
-    # - solar-pv-rooftop
-    # - offwind-ac-fb-r
-    # - offwind-ac-fl-r
-    # - offwind-dc-fb-r
-    # - offwind-dc-fl-r
-    # - offwind-dc-fb-oh
-    # - offwind-dc-fl-oh
-    # - offwind-h2-fb-oh
-    # - offwind-h2-fl-oh
-
-offshore_buses: true
-
-solving:
-  solver:  # Use commercial solver for high resolution results in SB
-    name: gurobi
-    options: gurobi-default
+  - onwind
+  - solar-pv-utility
+  - solar-pv-rooftop
+  - offwind-ac-fb-r
+  - offwind-ac-fl-r
+  - offwind-dc-fb-r
+  - offwind-dc-fl-r
+  - offwind-dc-fb-oh
+  - offwind-dc-fl-oh
+  - offwind-h2-fb-oh
+  - offwind-h2-fl-oh
 
 # res_tennet_mapping:
 #   offwind-ac-fb-r: Wind_offshore

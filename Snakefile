@@ -134,9 +134,9 @@ include: "rules/development.smk"
 include: "rules/report.smk"
 
 
-if config.get("final_adjustment"):
+if config.get("isie_workflow"):
 
-    include: "rules/pypsa_nl.smk"
+    include: "rules/isie_workflow.smk"
 
 
 # Specific Open-TYNDP rules and configurations

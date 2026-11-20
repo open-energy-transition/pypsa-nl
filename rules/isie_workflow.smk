@@ -59,24 +59,40 @@ rule create_netherland_core:
         """
 
 
-rule final_adjustment:
-    input:
-        network_nl=resources("nl_{horizon}.nc"),
-        network=resources("networks/composed_{horizon}.nc"),
-    output:
-        network=resources("networks/composed_{horizon}_adjusted.nc"),
-    params:
-        tennet_adjustment=config_provider("tennet_adjustment"),
-        # res_tennet_mapping=config_provider("res_tennet_mapping"),
-        res_tyndp_mapping=config_provider("res_tyndp_mapping"),
-        store_tyndp_mapping=config_provider("store_tyndp_mapping"),
-    message:
-        "Combine two networks"
-    script:
-        scripts("isie/final_adjustment.py")
+if config["isie_workflow"]["regionalize"]:
+
+    rule final_adjustment_regionalize:
+        input:
+            network_nl=resources("nl_{horizon}.nc"),
+            network=resources("networks/composed_{horizon}.nc"),
+        output:
+            network=resources("networks/composed_{horizon}_adjusted.nc"),
+        params:
+            tennet_adjustment=config_provider("tennet_adjustment"),
+            res_tyndp_mapping=config_provider("res_tyndp_mapping"),
+            store_tyndp_mapping=config_provider("store_tyndp_mapping"),
+        message:
+            "Combine two networks and make final adjustment"
+        script:
+            scripts("isie/final_adjustment_regionalize.py")
+
+else:
+
+    rule final_adjustment:
+        input:
+            network=resources("networks/composed_{horizon}.nc"),
+            tech_costs=resources("costs_{horizon}_processed.csv"),
+        output:
+            network=resources("networks/composed_{horizon}_adjusted.nc"),
+        params:
+            tennet_adjustment=config_provider("tennet_adjustment"),
+        message:
+            "Make final adjustment"
+        script:
+            scripts("isie/final_adjustment.py")
 
 
-if config.get("isie"):
+if config["isie_workflow"]["iterate"]:
 
     rule integrate_local_flex:
         input:

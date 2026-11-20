@@ -3,18 +3,26 @@
 #
 # SPDX-License-Identifier: MIT
 
-suffix = ""
 
-if config.get("final_adjustment"):
-    suffix += "_adjusted"
+def get_solve_network(w):
+    horizon = int(w.horizon)
+    isie_workflow = config.get("isie_workflow")
 
-if config.get("isie"):
-    suffix += "_isie"
+    suffix = ""
+
+    if isie_workflow and isie_workflow["year"] == horizon:
+        suffix = "_adjusted"
+        if isie_workflow.get("iterate", False):
+            suffix += "_isie"
+
+    network = resources("networks/composed_{horizon}" + f"{suffix}.nc")
+
+    return {"network": network}
 
 
 rule solve_network:
     input:
-        network=resources("networks/composed_{horizon}" + f"{suffix}.nc"),
+        unpack(get_solve_network),
         offshore_zone_trajectories=branch(
             config_provider("sector", "offshore_hubs_tyndp", "enable"),
             resources("offshore_zone_trajectories.csv"),
